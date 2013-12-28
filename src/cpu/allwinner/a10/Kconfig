@@ -9,6 +9,8 @@ config CPU_SPECIFIC_OPTIONS
 	select HAVE_INIT_TIMER
 	select HAVE_MONOTONIC_TIMER
 	select HAVE_UART_SPECIAL
+	select DRIVER_MMC
+	select DRIVER_MMC_BOOTBLOCK
 	select BOOTBLOCK_CONSOLE
 	select EARLY_CONSOLE
 
@@ -119,5 +121,12 @@ config CONSOLE_SERIAL_UART7
 	  Serial console on UART7
 
 endchoice
+
+config ALLWINNER_DEBUG_MMC
+	bool "Output verbose AllWinner-specific MMC/SD card debug messages"
+	default n
+	help
+	  This option enables additional MMC related debug messages from the
+	  Allwinner MMC driver.
 
 endif # if CPU_ALLWINNER_A10
