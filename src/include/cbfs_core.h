@@ -4,6 +4,7 @@
  * Copyright (C) 2008 Jordan Crouse <jordan@cosmicpenguin.net>
  * Copyright (C) 2012 Google, Inc.
  * Copyright (C) 2013 The Chromium OS Authors. All rights reserved.
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>	
  *
  * This file is dual-licensed. You can choose between:
  *   - The GNU GPL, version 2, as published by the Free Software Foundation
@@ -230,6 +231,10 @@ int cbfs_decompress(int algo, void *src, void *dst, int len);
 /* returns a pointer to CBFS master header, or CBFS_HEADER_INVALID_ADDRESS
  *  on failure */
 const struct cbfs_header *cbfs_get_header(struct cbfs_media *media);
+
+/* returns ssize_t (< 0 being an error >= 0 being the file offset), i.e offset to 
+   a file searched by name/type */
+struct cbfs_file *cbfs_get_file_modified(struct cbfs_media *media, const char *name);
 
 #endif /* __ROMCC__ */
 
