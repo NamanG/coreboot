@@ -232,8 +232,6 @@ int cbfs_decompress(int algo, void *src, void *dst, int len);
  *  on failure */
 const struct cbfs_header *cbfs_get_header(struct cbfs_media *media);
 
-/* returns ssize_t (< 0 being an error >= 0 being the file offset), i.e offset to 
-   a file searched by name/type */
 struct cbfs_file *cbfs_get_file_modified(struct cbfs_media *media, const char *name);
 
 #endif /* __ROMCC__ */

@@ -41,7 +41,7 @@
 #include <string.h>
 
 /* returns a pointer to CBFS master header, or CBFS_HEADER_INVALID_ADDRESS
- *  on failure */
+ *  on failure*/
 const struct cbfs_header* cbfs_get_header(struct cbfs_media *media)
 {
 	struct cbfs_header header;
