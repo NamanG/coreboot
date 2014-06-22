@@ -11,7 +11,7 @@
 #include <cbmem.h>
 
 
-static void cpu_enable_resources(device_t dev)
+static void cpu_read_resources(device_t dev)
 {
 	ram_resource(dev, 0, CONFIG_SYS_SDRAM_BASE >> 10,
 		     CONFIG_DRAM_SIZE_MB << 10);
@@ -30,9 +30,9 @@ static void cpu_noop(device_t dev)
 }
 
 static struct device_operations cpu_ops = {
-	.read_resources   = cpu_noop,
+	.read_resources   = cpu_read_resources,
 	.set_resources    = cpu_noop,
-	.enable_resources = cpu_enable_resources,
+	.enable_resources = cpu_noop,
 	.init             = cpu_init,
 	.scan_bus         = NULL,
 };

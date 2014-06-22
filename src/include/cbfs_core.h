@@ -190,6 +190,15 @@ struct cbfs_optionrom {
 #define CBFS_MEDIA_INVALID_MAP_ADDRESS	((void*)(0xffffffff))
 #define CBFS_DEFAULT_MEDIA		((void*)(0x0))
 
+struct cbfs_file_handler{
+	uint32_t found;
+	uint32_t data_offset;
+	uint32_t data_len;
+	struct cbfs_file file;
+};
+
+
+
 /* Media for CBFS to load files. */
 struct cbfs_media {
 
@@ -222,8 +231,8 @@ struct cbfs_media {
 struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name);
 
 /* returns pointer to file content inside CBFS after if type is correct */
-void *cbfs_get_file_content(struct cbfs_media *media, const char *name,
-			    int type, size_t *sz);
+//void *cbfs_get_file_content(struct cbfs_media *media, const char *name,
+//			    int type, size_t *sz);
 
 /* returns decompressed size on success, 0 on failure */
 int cbfs_decompress(int algo, void *src, void *dst, int len);
@@ -232,7 +241,9 @@ int cbfs_decompress(int algo, void *src, void *dst, int len);
  *  on failure */
 const struct cbfs_header *cbfs_get_header(struct cbfs_media *media);
 
-struct cbfs_file *cbfs_get_file_modified(struct cbfs_media *media, const char *name);
+int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const char *name, int type);
+
+void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type, size_t *sz);
 
 #endif /* __ROMCC__ */
 
