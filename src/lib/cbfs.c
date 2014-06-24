@@ -119,39 +119,66 @@ void *cbfs_load_optionrom(struct cbfs_media *media, uint16_t vendor,
 
 void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 {
-	struct cbfs_stage *stage = (struct cbfs_stage *)
-		cbfs_get_file_content(media, name, CBFS_TYPE_STAGE, NULL);
+	//struct cbfs_stage *stage = (struct cbfs_stage *)cbfs_get_file_content(media, name, CBFS_TYPE_STAGE, NULL);
+	struct cbfs_file_handler f;
+	struct cbfs_stage stage;
+	int c;
+	ssize_t value_read;
+	void * data;
+	ssize_t v_read;
+	c = cbfs_find_file(media, &f, name, CBFS_TYPE_STAGE);
+	DEBUG("It returned in cbfs_load_stage and c = %d\n",c);
+	if (c == 0) {
+	DEBUG("Inside successful if(c)\n");
+	DEBUG("data_offset = 0x%x\n",f.data_offset);
+	value_read = media->read(media, &stage, f.data_offset, sizeof(stage));
 	/* this is a mess. There is no ntohll. */
 	/* for now, assume compatible byte order until we solve this. */
 	uint32_t entry;
 	uint32_t final_size;
-
-	if (stage == NULL)
+	DEBUG("Read complete @offset = %d and length = %d\n", f.data_offset, value_read);
+	if (value_read != sizeof(stage))
 		return (void *) -1;
 
-	LOG("loading stage %s @ 0x%x (%d bytes), entry @ 0x%llx\n",
+	DEBUG("loading stage %s @ 0x%x (%d bytes), entry @ 0x%llx\n",
 			name,
-			(uint32_t) stage->load, stage->memlen,
-			stage->entry);
+			(uint32_t) stage.load, stage.memlen,
+			stage.entry);
+	
+	if(stage.compression == CBFS_COMPRESS_NONE) //i.e no compression
+	{
+		//No compression; hence we can directly read
+		DEBUG("READ DONE!");
+		v_read = media->read(media, (void *) (uintptr_t) stage.load, f.data_offset + sizeof(stage), f.data_len);
+		final_size = f.data_len;
+	}
+	else
+	{
+		data = media->map(media, f.data_offset + sizeof(stage), f.data_len);
 
-	final_size = cbfs_decompress(stage->compression,
-				     ((unsigned char *) stage) +
-				     sizeof(struct cbfs_stage),
-				     (void *) (uint32_t) stage->load,
-				     stage->len);
-	if (!final_size)
-		return (void *) -1;
+		final_size = cbfs_decompress(stage.compression, data,
+				     (void *) (uint32_t) stage.load,
+				     stage.len);
+
+		if (!final_size)
+			return (void *) -1;
+	}
 
 	/* Stages rely the below clearing so that the bss is initialized. */
-	memset((void *)((uintptr_t)stage->load + final_size), 0,
-	       stage->memlen - final_size);
+	memset((void *)((uintptr_t)stage.load + final_size), 0,
+	       stage.memlen - final_size);
 
 	DEBUG("stage loaded.\n");
 
-	entry = stage->entry;
+	entry = stage.entry;
 	// entry = ntohll(stage->entry);
-
 	return (void *) entry;
+	}
+	else {
+		ERROR("Stage not loaded.\n");
+		DEBUG("if (c) not passed.\n");
+		return (void *)-1;
+	}
 }
 
 /* Simple buffer */

@@ -89,10 +89,11 @@ const struct cbfs_header* cbfs_get_header(struct cbfs_media *media)
 
 int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const char *name, int type)
 {
-	uint32_t offset, align, romsize;
+	uint32_t offset, align, romsize,name_len;
 	struct cbfs_media default_media;
 	const struct cbfs_header *header;
 	ssize_t value_read;
+	const char *file_name;
 	
 	if (media == CBFS_DEFAULT_MEDIA) {
 		media = &default_media;
@@ -114,7 +115,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 #if defined(CONFIG_ARCH_X86) && CONFIG_ARCH_X86
 	romsize -= htonl(header->bootblocksize);
 #endif
-	
+	int catch;	
 	DEBUG("CBFS location: 0x%x~0x%x, align: %d\n", offset, romsize, align);
 	DEBUG("Looking for '%s' starting from 0x%x.\n", name, offset);
 	media->open(media);
@@ -144,14 +145,29 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 
 		DEBUG("Magic comparision successful\n");
 		DEBUG("File type you read is %d and what was requested is %d\n",f->file.type,type);
-		f->found = 0;
+		f->found = -1;
 		if(f->file.type == type){
-			f->found = 1;
-			//offset += f->file.offset; is this needed??
-			f->data_offset = offset; 
-			f->data_len = f->file.len;
-			DEBUG("Found file:offset = 0x%x, len=%d\n", f->data_offset, f->data_len);
-			return f->found;
+			
+			name_len = f->file.offset - sizeof(f->file);
+			DEBUG(" - load entry 0x%x file name (%d bytes)...\n", offset,name_len);
+			// load file name (arbitrary length).
+			file_name = (const char *)media->map(media, offset + sizeof(f->file), name_len);
+			//this mapping done to verify name of file
+			if (file_name == CBFS_MEDIA_INVALID_MAP_ADDRESS) {
+				ERROR("ERROR: Failed to get filename: 0x%x.\n", offset);
+			} else if (strcmp(file_name, name) == 0) {
+					f->found = 0;
+					f->data_offset = offset + f->file.offset; 
+					f->data_len = f->file.len;
+					f->align = align;
+					media->unmap(media, file_name);
+					DEBUG("Found file:offset = 0x%x, len=%d\n", f->data_offset, f->data_len);
+					catch = f->found;
+					return catch;
+			} else {
+				DEBUG("unmatched file offset = 0x%x : %s\n", offset, file_name);
+				media->unmap(media,file_name);
+			}
 		}
 		// Move to next file.
 		offset += f->file.len + f->file.offset;
@@ -164,40 +180,63 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 	return -1;
 }
 
+
 void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type, size_t *sz)
 {
 	struct cbfs_file_handler f;
-	ssize_t value_read;
 	int c;
-	struct cbfs_file file, *file_ptr;
 	c = cbfs_find_file(media, &f, name, type);
-	if (c){
-		DEBUG("File has been found and can be read");
-		value_read = media->read(media, &file, f.data_offset + f.file.offset , f.data_len);
+	DEBUG("Returned to cbfs_get_file_content\n");
+	if (c == 0){
+	DEBUG("Found file. Will be mapping it now!\n");
+	if (sz)
+		*sz = 0;
 
-		if (sz)
-			*sz = 0;
+	if (f.file.type != type) {
+		ERROR("File '%s' is of type %x, but we requested %x.\n", name, f.file.type, type);
+		return NULL;
+	}
 
-		if (f.file.type != type) {
-			ERROR("File '%s' is of type %x, but we requested %x.\n", name,
-		      	f.file.type, type);
-			return NULL;
-		}
-		
-		if (sz)
-			*sz = f.data_len;
-
-		file_ptr = &file;
-		return (void *)file_ptr;
+	if (sz)
+		*sz = f.data_len;
+	//return (void *)file;
+	return media->map(media, f.data_offset, f.data_len + f.file.offset);
 	}
 	else {
-		ERROR("File not found");
+		DEBUG("condition not successful\n");
+		ERROR("File Not Found\n");
 		return NULL;
-		//Option to map a file will be added later
 	}
 }
 
 
+/*void cbfs_get_data(struct cbfs_media *media, const char *name, int type)
+{
+	struct cbfs_file_handler f;
+	ssize_t value_read;
+	int c;
+	c = cbfs_find_file(media, &f, name, type);
+	if (c == 0){
+		DEBUG("File has been found and can be read\n");
+		uint32_t loop_offset = f.data_offset + f.file.offset;
+		uint32_t loop_align = f.align;
+
+		while (f.data_len > 0){
+		
+			struct cbfs_file file;
+			value_read = media->read(media, &file, loop_offset , sizeof(file));
+			loop_offset += file.len + file.offset; 
+			if (loop_offset % loop_align)
+				loop_offset += loop_align = (loop_offset % loop_align);
+			f.data_len -= sizeof(file); 
+		}
+	}
+	else {
+		ERROR("File not found\n");
+	}
+		
+}
+*/	
 
 /*
 struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name)
@@ -330,7 +369,7 @@ int cbfs_decompress(int algo, void *src, void *dst, int len)
 #endif
 		default:
 			ERROR("tried to decompress %d bytes with algorithm #%x,"
-			      "but that algorithm id is unsupported.\n", len,
+			      "but that algorithm id is unsupporteid.\n", len,
 			      algo);
 			return 0;
 	}
