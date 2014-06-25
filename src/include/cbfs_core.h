@@ -243,7 +243,7 @@ const struct cbfs_header *cbfs_get_header(struct cbfs_media *media);
 int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const char *name, int type);
 
 
-/* returns pointer to file content inside CBFS after if type is correct */
+/* returns pointer to file content inside CBFS after verifying if type is correct */
 void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type, size_t *sz);
 
 #endif /* __ROMCC__ */

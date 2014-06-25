@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2008, Jordan Crouse <jordan@cosmicpenguin.net>
  * Copyright (C) 2013 The Chromium OS Authors. All rights reserved.
- *
+ * Copyright (C) 2014, Naman Govil <namangov@gmail.com>
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; version 2 of the License.
@@ -116,10 +116,10 @@ void *cbfs_load_optionrom(struct cbfs_media *media, uint16_t vendor,
 
 	return dest;
 }
-
+/*Loads Stage; reading content that is not compressed
+ */
 void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 {
-	//struct cbfs_stage *stage = (struct cbfs_stage *)cbfs_get_file_content(media, name, CBFS_TYPE_STAGE, NULL);
 	struct cbfs_file_handler f;
 	struct cbfs_stage stage;
 	int c;
@@ -135,12 +135,9 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 			return NULL;
 		}
 	}
-							
+						
 	c = cbfs_find_file(media, &f, name, CBFS_TYPE_STAGE);
-	DEBUG("It returned in cbfs_load_stage and c = %d\n",c);
 	if (c == 0) {
-	DEBUG("Inside successful if(c)\n");
-	DEBUG("data_offset = 0x%x\n",f.data_offset);
 	value_read = media->read(media, &stage, f.data_offset, sizeof(stage));
 	/* this is a mess. There is no ntohll. */
 	/* for now, assume compatible byte order until we solve this. */
@@ -158,14 +155,14 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 	if(stage.compression == CBFS_COMPRESS_NONE) //i.e no compression
 	{
 		//No compression; hence we can directly read
-		DEBUG("READ DONE!");
+		DEBUG("Read Done\n");
 		v_read = media->read(media, (void *) (uintptr_t) stage.load, f.data_offset + sizeof(stage), f.data_len);
 		final_size = f.data_len;
 	}
 	else
 	{
 		data = media->map(media, f.data_offset + sizeof(stage), f.data_len);
-
+		DEBUG("Map Done\n");
 		final_size = cbfs_decompress(stage.compression, data,
 				     (void *) (uint32_t) stage.load,
 				     stage.len);
@@ -181,12 +178,10 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 	DEBUG("stage loaded.\n");
 
 	entry = stage.entry;
-	// entry = ntohll(stage->entry);
 	return (void *) entry;
 	}
 	else {
 		ERROR("Stage not loaded.\n");
-		DEBUG("if (c) not passed.\n");
 		return (void *)-1;
 	}
 }

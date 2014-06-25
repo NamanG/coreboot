@@ -86,7 +86,9 @@ const struct cbfs_header* cbfs_get_header(struct cbfs_media *media)
 }
 
 /* public API starts here*/
-
+/* This functions finds the absolute data_offset of a file searched for by name/type
+   Returns 0 on success and -1 on failure
+ */
 int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const char *name, int type)
 {
 	uint32_t offset, align, romsize,name_len;
@@ -122,12 +124,11 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 	while (offset < romsize)
 	{
 		value_read = media->read(media, &f->file, offset, sizeof(f->file));
-		DEBUG("Reading done. size = %d bytes\n", value_read);
 		if(value_read != sizeof(f->file)){
 			return -1; //error: since read not successful
 			break;
 		}
-		DEBUG("Reading successful\n"); 
+		//make all ntohl() at once place to avoid any gibberish later
 		f->file.len = ntohl(f->file.len);
 		f->file.offset = ntohl(f->file.offset);
 		f->file.type = ntohl(f->file.type);
@@ -143,8 +144,6 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 			//continuing with new offset
 		}
 
-		DEBUG("Magic comparision successful\n");
-		DEBUG("File type you read is %d and what was requested is %d\n",f->file.type,type);
 		f->found = -1;
 		if(f->file.type == type){
 			
@@ -179,7 +178,8 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 	return -1;
 }
 
-
+/*Returns pointer to file content inside CBFS after verifying type
+ */
 void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type, size_t *sz)
 {
 	struct cbfs_file_handler f;
@@ -194,7 +194,6 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 		}
 	}
 	c = cbfs_find_file(media, &f, name, type);
-	DEBUG("Returned to cbfs_get_file_content\n");
 	if (c == 0){
 	DEBUG("Found file. Will be mapping it now!\n");
 	if (sz)
@@ -207,7 +206,6 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 
 	if (sz)
 		*sz = f.data_len;
-	//return (void *)file;
 	return media->map(media, f.data_offset, f.data_len + f.file.offset);
 	}
 	else {
@@ -246,119 +244,6 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 }
 */	
 
-/*
-struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name)
-{
-	const char *file_name;
-	uint32_t offset, align, romsize, name_len;
-	const struct cbfs_header *header;
-	struct cbfs_file file;
-	struct cbfs_file *file_ptr;
-	struct cbfs_media default_media;
-	//ssize_t value_read;
-
-	if (media == CBFS_DEFAULT_MEDIA) {
-		media = &default_media;
-		if (init_default_cbfs_media(media) != 0) {
-			ERROR("Failed to initialize default media.\n");
-			return NULL;
-		}
-	}
-
-	if (CBFS_HEADER_INVALID_ADDRESS == (header = cbfs_get_header(media)))
-		return NULL;
-
-	// Logical offset (for source media) of first file.
-	// Now we know where the file lives
-	offset = ntohl(header->offset);
-	align = ntohl(header->align);
-	romsize = ntohl(header->romsize);
-
-	// TODO Add a "size" in CBFS header for a platform independent way to
-	// determine the end of CBFS data.
-#if defined(CONFIG_ARCH_X86) && CONFIG_ARCH_X86
-	romsize -= htonl(header->bootblocksize);
-#endif
-	DEBUG("CBFS location: 0x%x~0x%x, align: %d\n", offset, romsize, align);
-
-	DEBUG("Looking for '%s' starting from 0x%x.\n", name, offset);
-	media->open(media);
-	while (offset < romsize &&
-	       media->read(media, &file, offset, sizeof(file)) == sizeof(file)) {
-		if (memcmp(CBFS_FILE_MAGIC, file.magic,
-			   sizeof(file.magic)) != 0) {
-			uint32_t new_align = align;
-			if (offset % align)
-				new_align += align - (offset % align);
-			ERROR("ERROR: No file header found at 0x%x - "
-			      "try next aligned address: 0x%x.\n", offset,
-			      offset + new_align);
-			offset += new_align;
-			continue;
-		}
-		name_len = ntohl(file.offset) - sizeof(file);
-		DEBUG(" - load entry 0x%x file name (%d bytes)...\n", offset,
-		      name_len);
-
-		// load file name (arbitrary length).
-		file_name = (const char *)media->map(
-				media, offset + sizeof(file), name_len);
-		if (file_name == CBFS_MEDIA_INVALID_MAP_ADDRESS) {
-			ERROR("ERROR: Failed to get filename: 0x%x.\n", offset);
-		} else if (strcmp(file_name, name) == 0) {
-			int file_offset = ntohl(file.offset),
-			    file_len = ntohl(file.len);
-			DEBUG("Found file (offset=0x%x, len=%d).\n",
-			    offset + file_offset, file_len);
-			DEBUG("First mappings result %s\n",file_name);
-			media->unmap(media, file_name);
-			file_ptr = media->map(media, offset, file_offset + file_len);
-			//value_read = media->read(media, &f, offset, file_offset + file_len);
-			DEBUG("Second mapping result offset = %d, file_offset = %d,file_len = %d\n",offset,file_offset,file_len);
-			//file_ptr = &f;
-			media->close(media);
-			return file_ptr;
-		} else {
-			DEBUG(" (unmatched file @0x%x: %s)\n", offset,
-			      file_name);
-			media->unmap(media, file_name);
-		}
-
-		// Move to next file.
-		offset += ntohl(file.len) + ntohl(file.offset);
-		if (offset % align)
-			offset += align - (offset % align);
-	}
-	media->close(media);
-	LOG("WARNING: '%s' not found.\n", name);
-	return NULL;
-}
-
-void *cbfs_get_file_content(struct cbfs_media *media, const char *name,
-			    int type, size_t *sz)
-{
-//	struct cbfs_file f;
-	struct cbfs_file *file = cbfs_get_file(media, name);
-	if (sz)
-		*sz = 0;
-
-	if (file == NULL) {
-		ERROR("Could not find file '%s'.\n", name);
-		return NULL;
-	}
-
-	if (ntohl(file->type) != type) {
-		ERROR("File '%s' is of type %x, but we requested %x.\n", name,
-		      ntohl(file->type), type);
-		return NULL;
-	}
-
-	if (sz)
-		*sz = ntohl(file->len);
-	//return (void *)file;
-	return (void *)CBFS_SUBHEADER(file);
-}
-*/
 int cbfs_decompress(int algo, void *src, void *dst, int len)
 {
 	switch (algo) {
