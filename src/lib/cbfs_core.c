@@ -159,7 +159,6 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 					f->found = 0;
 					f->data_offset = offset + f->file.offset; 
 					f->data_len = f->file.len;
-					f->align = align;
 					media->unmap(media, file_name);
 					DEBUG("Found file:offset = 0x%x, len=%d\n", f->data_offset, f->data_len);
 					catch = f->found;

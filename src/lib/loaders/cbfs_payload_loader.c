@@ -25,9 +25,8 @@ static int cbfs_locate_payload(struct payload *payload)
 	void *buffer;
 	size_t size;
 	const int type = CBFS_TYPE_PAYLOAD;
-
-	buffer = cbfs_get_file_content(CBFS_DEFAULT_MEDIA, payload->name,
-					type, &size);
+	buffer = cbfs_get_file_content(CBFS_DEFAULT_MEDIA, payload->name, type, &size);
+	
 
 	if (buffer == NULL)
 		return -1;
