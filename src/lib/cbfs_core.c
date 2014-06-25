@@ -185,6 +185,15 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 {
 	struct cbfs_file_handler f;
 	int c;
+	struct cbfs_media default_media;
+
+	if (media == CBFS_DEFAULT_MEDIA) {
+		media = &default_media;
+		if (init_default_cbfs_media(media) != 0) {
+			ERROR("Failed to initialize default media.\n");
+			return NULL;
+		}
+	}
 	c = cbfs_find_file(media, &f, name, type);
 	DEBUG("Returned to cbfs_get_file_content\n");
 	if (c == 0){

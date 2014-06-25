@@ -126,6 +126,16 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 	ssize_t value_read;
 	void * data;
 	ssize_t v_read;
+	struct cbfs_media default_media;
+
+	if (media == CBFS_DEFAULT_MEDIA) {
+			media = &default_media;
+			if (init_default_cbfs_media(media) != 0) {
+			ERROR("Failed to initialize default media.\n");
+			return NULL;
+		}
+	}
+							
 	c = cbfs_find_file(media, &f, name, CBFS_TYPE_STAGE);
 	DEBUG("It returned in cbfs_load_stage and c = %d\n",c);
 	if (c == 0) {

@@ -230,9 +230,6 @@ struct cbfs_media {
 /* returns pointer to a file entry inside CBFS or NULL */
 struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name);
 
-/* returns pointer to file content inside CBFS after if type is correct */
-//void *cbfs_get_file_content(struct cbfs_media *media, const char *name,
-//			    int type, size_t *sz);
 
 /* returns decompressed size on success, 0 on failure */
 int cbfs_decompress(int algo, void *src, void *dst, int len);
@@ -241,8 +238,12 @@ int cbfs_decompress(int algo, void *src, void *dst, int len);
  *  on failure */
 const struct cbfs_header *cbfs_get_header(struct cbfs_media *media);
 
+/*Returns success (0) on finding the file requested by verifying name/type; -1 if file not found
+ The absolute data_offset to the file is stored*/
 int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const char *name, int type);
 
+
+/* returns pointer to file content inside CBFS after if type is correct */
 void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type, size_t *sz);
 
 #endif /* __ROMCC__ */
