@@ -38,7 +38,7 @@ static void *on_chip_memory_map(struct cbfs_media *media, size_t offset,
 				 size_t count)
 {
 	printk(BIOS_DEBUG, "default_media->map(0x%x, 0x%x)\n", offset, count);
-	
+
 	printk(BIOS_DEBUG, "count value is equal to %d\n", count);
 	struct cbfs_mmc_context *ctx = (void *)media->context;
 	ctx->mapping_size += count;
@@ -48,9 +48,9 @@ static void *on_chip_memory_map(struct cbfs_media *media, size_t offset,
 
 static void * dummy_unmap(struct cbfs_media *media, const void *address)
 {
-	
+
 	struct cbfs_mmc_context *ctx = (void *)media->context;
-	ctx->mapping_size -= 0; //since no unmapping is happening 
+	ctx->mapping_size -= 0; //since no unmapping is happening
 	return NULL;
 }
 

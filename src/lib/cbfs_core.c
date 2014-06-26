@@ -96,7 +96,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 	const struct cbfs_header *header;
 	ssize_t value_read;
 	const char *file_name;
-	
+
 	if (media == CBFS_DEFAULT_MEDIA) {
 		media = &default_media;
 		if (init_default_cbfs_media(media) != 0) {
@@ -104,7 +104,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 			return -1;
 		}
 	}
-	
+
 	if (CBFS_HEADER_INVALID_ADDRESS == (header = cbfs_get_header(media)))
 		return -1; // error
 
@@ -117,7 +117,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 #if defined(CONFIG_ARCH_X86) && CONFIG_ARCH_X86
 	romsize -= htonl(header->bootblocksize);
 #endif
-	int catch;	
+	int catch;
 	DEBUG("CBFS location: 0x%x~0x%x, align: %d\n", offset, romsize, align);
 	DEBUG("Looking for '%s' starting from 0x%x.\n", name, offset);
 	media->open(media);
@@ -146,7 +146,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 
 		f->found = -1;
 		if(f->file.type == type){
-			
+
 			name_len = f->file.offset - sizeof(f->file);
 			DEBUG(" - load entry 0x%x file name (%d bytes)...\n", offset,name_len);
 			// load file name (arbitrary length).
@@ -156,7 +156,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 				ERROR("ERROR: Failed to get filename: 0x%x.\n", offset);
 			} else if (strcmp(file_name, name) == 0) {
 					f->found = 0;
-					f->data_offset = offset + f->file.offset; 
+					f->data_offset = offset + f->file.offset;
 					f->data_len = f->file.len;
 					media->unmap(media, file_name);
 					DEBUG("Found file:offset = 0x%x, len=%d\n", f->data_offset, f->data_len);
@@ -228,21 +228,21 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 		uint32_t loop_align = f.align;
 
 		while (f.data_len > 0){
-		
+
 			struct cbfs_file file;
 			value_read = media->read(media, &file, loop_offset , sizeof(file));
-			loop_offset += file.len + file.offset; 
+			loop_offset += file.len + file.offset;
 			if (loop_offset % loop_align)
 				loop_offset += loop_align = (loop_offset % loop_align);
-			f.data_len -= sizeof(file); 
+			f.data_len -= sizeof(file);
 		}
 	}
 	else {
 		ERROR("File not found\n");
 	}
-		
+
 }
-*/	
+*/
 
 int cbfs_decompress(int algo, void *src, void *dst, int len)
 {

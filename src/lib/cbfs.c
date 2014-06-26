@@ -135,7 +135,7 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 			return NULL;
 		}
 	}
-						
+
 	c = cbfs_find_file(media, &f, name, CBFS_TYPE_STAGE);
 	if (c == 0) {
 	value_read = media->read(media, &stage, f.data_offset, sizeof(stage));
@@ -151,7 +151,7 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 			name,
 			(uint32_t) stage.load, stage.memlen,
 			stage.entry);
-	
+
 	if(stage.compression == CBFS_COMPRESS_NONE) //i.e no compression
 	{
 		//No compression; hence we can directly read

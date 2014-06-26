@@ -4,7 +4,7 @@
  * Copyright (C) 2008 Jordan Crouse <jordan@cosmicpenguin.net>
  * Copyright (C) 2012 Google, Inc.
  * Copyright (C) 2013 The Chromium OS Authors. All rights reserved.
- * Copyright (C) 2014 Naman Govil <namangov@gmail.com>	
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
  *
  * This file is dual-licensed. You can choose between:
  *   - The GNU GPL, version 2, as published by the Free Software Foundation
