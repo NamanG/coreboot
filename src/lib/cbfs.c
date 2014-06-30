@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2008, Jordan Crouse <jordan@cosmicpenguin.net>
  * Copyright (C) 2013 The Chromium OS Authors. All rights reserved.
- *
+ * Copyright (C) 2014, Naman Govil <namangov@gmail.com>
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; version 2 of the License.
@@ -119,38 +119,79 @@ void *cbfs_load_optionrom(struct cbfs_media *media, uint16_t vendor,
 
 void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 {
-	struct cbfs_stage *stage = (struct cbfs_stage *)
-		cbfs_get_file_content(media, name, CBFS_TYPE_STAGE, NULL);
+	struct cbfs_file_handle f;
+	struct cbfs_stage stage;
+	int c;
+	ssize_t value_read;
+	void * data;
+	ssize_t v_read;
+	struct cbfs_media default_media;
+
+	if (media == CBFS_DEFAULT_MEDIA) {
+			media = &default_media;
+			if (init_default_cbfs_media(media) != 0) {
+			ERROR("Failed to initialize default media.\n");
+			return (void *)-1;
+		}
+	}
+
+	c = cbfs_find_file(media, &f, name, CBFS_TYPE_STAGE);
+
+	if (c < 0) {
+		ERROR("Stage not loaded\n");
+		return (void *)-1;
+	}
+
+	value_read = media->read(media, &stage, f.data_offset, sizeof(stage));
 	/* this is a mess. There is no ntohll. */
 	/* for now, assume compatible byte order until we solve this. */
+	if (value_read != sizeof(stage))
+		return (void *)-1;
+
 	uint32_t entry;
 	uint32_t final_size;
 
-	if (stage == NULL)
-		return (void *) -1;
+	DEBUG("Read Complete @offset = 0x%x and length = %d\n",
+			f.data_offset, value_read);
 
 	LOG("loading stage %s @ 0x%x (%d bytes), entry @ 0x%llx\n",
 			name,
-			(uint32_t) stage->load, stage->memlen,
-			stage->entry);
+			(uint32_t) stage.load, stage.memlen,
+			stage.entry);
 
-	final_size = cbfs_decompress(stage->compression,
-				     ((unsigned char *) stage) +
-				     sizeof(struct cbfs_stage),
-				     (void *) (uint32_t) stage->load,
-				     stage->len);
-	if (!final_size)
-		return (void *) -1;
+
+	if(stage.compression == CBFS_COMPRESS_NONE) {
+		//No compression; hence we can directly read
+		DEBUG("Read Done\n");
+		v_read = media->read(media, (void *) (uintptr_t) stage.load,
+				f.data_offset + sizeof(stage), f.data_len);
+		if (v_read != f.data_len)
+			return (void *)-1;
+
+		final_size = f.data_len;
+	}
+	else {
+		data = media->map(media, f.data_offset + sizeof(stage), f.data_len);
+		if (data == CBFS_MEDIA_INVALID_MAP_ADDRESS) {
+			ERROR("Map not successful");
+			return (void *) -1;
+		}
+
+		DEBUG("Map Done\n");
+		final_size = cbfs_decompress(stage.compression, data,
+				     (void *) (uint32_t) stage.load,
+				     stage.len);
+
+		if (!final_size)
+			return (void *) -1;
+	}
 
 	/* Stages rely the below clearing so that the bss is initialized. */
-	memset((void *)((uintptr_t)stage->load + final_size), 0,
-	       stage->memlen - final_size);
+	memset((void *)((uintptr_t)stage.load + final_size), 0,
+	       stage.memlen - final_size);
 
 	DEBUG("stage loaded.\n");
-
-	entry = stage->entry;
-	// entry = ntohll(stage->entry);
-
+	entry = stage.entry;
 	return (void *) entry;
 }
 
