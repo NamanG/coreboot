@@ -28,7 +28,6 @@
 #include <arch/cpu.h>
 #include <cpu/x86/name.h>
 #include <cbfs_core.h>
-#include <arch/byteorder.h>
 #include <elog.h>
 #if CONFIG_CHROMEOS
 #include <vendorcode/google/chromeos/gnvs.h>
@@ -152,11 +151,11 @@ static int smbios_write_type0(unsigned long *current, int handle)
 #endif
 
 	{
-		const struct cbfs_header *header;
+		struct cbfs_header header;
 		u32 romsize = CONFIG_ROM_SIZE;
-		header = cbfs_get_header(CBFS_DEFAULT_MEDIA);
-		if (header != CBFS_HEADER_INVALID_ADDRESS)
-			romsize = ntohl(header->romsize);
+		if (!cbfs_get_header(CBFS_DEFAULT_MEDIA, &header)) {
+			romsize = header.romsize;
+			}
 		t->bios_rom_size = (romsize / 65535) - 1;
 	}
 
