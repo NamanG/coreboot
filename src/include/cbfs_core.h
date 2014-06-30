@@ -4,6 +4,7 @@
  * Copyright (C) 2008 Jordan Crouse <jordan@cosmicpenguin.net>
  * Copyright (C) 2012 Google, Inc.
  * Copyright (C) 2013 The Chromium OS Authors. All rights reserved.
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
  *
  * This file is dual-licensed. You can choose between:
  *   - The GNU GPL, version 2, as published by the Free Software Foundation
@@ -189,6 +190,12 @@ struct cbfs_optionrom {
 #define CBFS_MEDIA_INVALID_MAP_ADDRESS	((void*)(0xffffffff))
 #define CBFS_DEFAULT_MEDIA		((void*)(0x0))
 
+struct cbfs_file_handle {
+	uint32_t data_offset;
+	uint32_t data_len;
+	struct cbfs_file file;
+};
+
 /* Media for CBFS to load files. */
 struct cbfs_media {
 
@@ -220,16 +227,29 @@ struct cbfs_media {
 /* returns pointer to a file entry inside CBFS or NULL */
 struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name);
 
-/* returns pointer to file content inside CBFS after if type is correct */
-void *cbfs_get_file_content(struct cbfs_media *media, const char *name,
-			    int type, size_t *sz);
 
 /* returns decompressed size on success, 0 on failure */
 int cbfs_decompress(int algo, void *src, void *dst, int len);
 
-/* returns a pointer to CBFS master header, or CBFS_HEADER_INVALID_ADDRESS
- *  on failure */
-const struct cbfs_header *cbfs_get_header(struct cbfs_media *media);
+/* finds the CBFS master header and fills it in a cbfs_header structure,
+ *  return 0 on success and <0 if header not found */
+int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header);
+
+/* Returns success (0) on finding the file requested by verifying name;
+ * -1 if file not found
+ * The absolute data_offset to the file is stored */
+int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f,
+		const char *name);
+
+/* Returns success (0) on finding the file requested by verifying name and type;
+ * -1 if file not found
+ *  The absolute data_offset to the file is stored */
+int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f,
+		const char *name, int type);
+
+/* returns pointer to file content inside CBFS after verifying if type is correct */
+void *cbfs_get_file_content(struct cbfs_media *media, const char *name,
+		int type, size_t *sz);
 
 #endif /* __ROMCC__ */
 
