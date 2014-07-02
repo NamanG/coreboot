@@ -55,7 +55,7 @@ int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header)
 			return -1;
 		}
 	}
-	
+
 	media->open(media);
 	DEBUG("CBFS_HEADER_ROM_ADDRESS: 0x%x/0x%x\n", CBFS_HEADER_ROM_ADDRESS,
 	      CONFIG_ROM_SIZE);
