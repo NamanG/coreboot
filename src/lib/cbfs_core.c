@@ -43,46 +43,42 @@
 
 /* returns a pointer to CBFS master header, or CBFS_HEADER_INVALID_ADDRESS
  *  on failure*/
-const struct cbfs_header* cbfs_get_header(struct cbfs_media *media)
+int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header)
 {
-	struct cbfs_header header;
-	const struct cbfs_header *h;
+	//struct cbfs_header h;
 	struct cbfs_media default_media;
 	ssize_t header_size;
 	if (media == CBFS_DEFAULT_MEDIA) {
 		media = &default_media;
 		if (init_default_cbfs_media(media) != 0) {
 			ERROR("Failed to initialize default media.\n");
-			return CBFS_HEADER_INVALID_ADDRESS;
+			return -1;
 		}
 	}
-
+	
 	media->open(media);
 	DEBUG("CBFS_HEADER_ROM_ADDRESS: 0x%x/0x%x\n", CBFS_HEADER_ROM_ADDRESS,
 	      CONFIG_ROM_SIZE);
-	header_size = media->read(media, &header, CBFS_HEADER_ROM_ADDRESS, sizeof(header));
+	header_size = media->read(media, (void *)header, CBFS_HEADER_ROM_ADDRESS, sizeof(*header));
 	//size of mapping (now read) : 32 bytes
 	DEBUG("Size of read done is : %zd bytes\n",header_size);
 	media->close(media);
 
-	if (header_size != sizeof(header)) {
+	if (header_size != sizeof(*header)) {
 		ERROR("Failed to load CBFS header from 0x%x\n",CBFS_HEADER_ROM_ADDRESS);
-		return CBFS_HEADER_INVALID_ADDRESS;
+		return -1;
 	}
 
-	if (CBFS_HEADER_MAGIC != ntohl(header.magic)) {
+	if (CBFS_HEADER_MAGIC != ntohl(header->magic)) {
 		ERROR("Could not find valid CBFS master header at %x: "
 		      "%x vs %x.\n", CBFS_HEADER_ROM_ADDRESS, CBFS_HEADER_MAGIC,
-		      ntohl(header.magic));
-		if (header.magic == 0xffffffff) {
+		      ntohl(header->magic));
+		if (header->magic == 0xffffffff) {
 			ERROR("Maybe ROM is not mapped properly?\n");
 		}
-		return CBFS_HEADER_INVALID_ADDRESS;
+		return -1;
 	}
-
-	h=&header;
-
-	return h;
+	return 0;
 }
 
 /* public API starts here*/
@@ -93,7 +89,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 {
 	uint32_t offset, align, romsize,name_len;
 	struct cbfs_media default_media;
-	const struct cbfs_header *header;
+	struct cbfs_header header;
 	ssize_t value_read;
 	const char *file_name;
 
@@ -105,17 +101,20 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 		}
 	}
 
-	if (CBFS_HEADER_INVALID_ADDRESS == (header = cbfs_get_header(media)))
+	int flag;
+	flag = cbfs_get_header(media, &header);
+
+	if (flag != 0)
 		return -1; // error
 
 	// Logical offset (for source media) of first file.
 	// Now we know where the file lives
-	offset = ntohl(header->offset);
-	align = ntohl(header->align);
-	romsize = ntohl(header->romsize);
+	offset = ntohl(header.offset);
+	align = ntohl(header.align);
+	romsize = ntohl(header.romsize);
 
 #if defined(CONFIG_ARCH_X86) && CONFIG_ARCH_X86
-	romsize -= htonl(header->bootblocksize);
+	romsize -= htonl(header.bootblocksize);
 #endif
 	int catch;
 	DEBUG("CBFS location: 0x%x~0x%x, align: %d\n", offset, romsize, align);

@@ -236,7 +236,7 @@ int cbfs_decompress(int algo, void *src, void *dst, int len);
 
 /* returns a pointer to CBFS master header, or CBFS_HEADER_INVALID_ADDRESS
  *  on failure */
-const struct cbfs_header *cbfs_get_header(struct cbfs_media *media);
+int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header);
 
 /*Returns success (0) on finding the file requested by verifying name/type; -1 if file not found
  The absolute data_offset to the file is stored*/
