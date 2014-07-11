@@ -21,6 +21,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <cbfs_core.h>
 
 struct buffer_area {
 	void *data;
@@ -32,6 +33,8 @@ struct payload {
 	struct buffer_area backing_store;
 	/* Used when payload wants memory coreboot ramstage is running at. */
 	struct buffer_area bounce;
+	struct cbfs_media *media;
+	struct cbfs_file_handler f;
 	void *entry;
 };
 

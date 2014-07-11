@@ -79,7 +79,7 @@ const struct cbfs_header* cbfs_get_header(struct cbfs_media *media)
 		}
 		return CBFS_HEADER_INVALID_ADDRESS;
 	}
-
+	
 	h=&header;
 
 	return h;
@@ -178,7 +178,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 	return -1;
 }
 
-/*Returns pointer to file content inside CBFS after verifying type
+/* Returns pointer to file content inside CBFS after verifying type
  */
 void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type, size_t *sz)
 {
@@ -206,7 +206,7 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 
 	if (sz)
 		*sz = f.data_len;
-	return media->map(media, f.data_offset, f.data_len + f.file.offset);
+	return media->map(media, f.data_offset, f.data_len);// + f.file.offset);
 	}
 	else {
 		DEBUG("condition not successful\n");

@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2003 Eric W. Biederman <ebiederm@xmission.com>
  * Copyright (C) 2009 Ron Minnich <rminnich@gmail.com>
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -218,13 +219,20 @@ static int build_self_segment_list(
 {
 	struct segment *new;
 	struct segment *ptr;
-	struct cbfs_payload_segment *segment, *first_segment;
+	struct cbfs_payload_segment segment, *first_segment;
 	struct cbfs_payload *cbfs_payload;
-	cbfs_payload = payload->backing_store.data;
+	struct cbfs_media *media;
+	uint32_t val;
+	//cbfs_payload = payload->backing_store.data;
 	memset(head, 0, sizeof(*head));
 	head->next = head->prev = head;
-	first_segment = segment = &cbfs_payload->segments;
-
+	//first_segment = segment = &cbfs_payload->segments;
+	media = payload->media;
+	val = media->read(media, &segment, payload->f.data_offset, sizeof(segment));
+	//read metadata for payload segment
+	if (val != sizeof(segment))
+		return -1;
+//not changed anything below this
 	while(1) {
 		printk(BIOS_DEBUG, "Loading segment from rom address 0x%p\n", segment);
 		switch(segment->type) {
