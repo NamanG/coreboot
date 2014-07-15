@@ -3,6 +3,7 @@
  *
  * Copyright (C) 2003 Eric W. Biederman <ebiederm@xmission.com>
  * Copyright (C) 2009 Ron Minnich <rminnich@gmail.com>
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,6 +29,7 @@
 #include <lib.h>
 #include <bootmem.h>
 #include <payload_loader.h>
+#include <cbfs_core.h>
 
 /* from coreboot_ram.ld: */
 extern unsigned char _ram_seg;
@@ -217,13 +219,34 @@ static int build_self_segment_list(
 	struct payload *payload, uintptr_t *entry)
 {
 	struct segment *new;
-	struct segment *ptr;
 	struct cbfs_payload_segment *segment, *first_segment;
-	struct cbfs_payload *cbfs_payload;
-	cbfs_payload = payload->backing_store.data;
+	struct cbfs_media default_media, *media;
+	int value_read;
+	media = payload->media;
+	/* is there required here? */
+	if (media == CBFS_DEFAULT_MEDIA) {
+		media = &default_media;
+		if (init_default_cbfs_media(media) != 0) {
+			ERROR("Failed to initialize media\n");
+			return -1;
+		}
+	}
+
+	media->open(media);
+	//reading metadata for payload stage
+	value_read = media->read(media, (void *)segment, payload->f.data_offset,
+			sizeof(*segment)); 
+	media->close(media);
+	if (value_read != sizeof(*segment)) {
+		ERROR("Read for payload metadata not successful");
+		return -1;
+	}
+	
+	//cbfs_payload = payload->backing_store.data;
 	memset(head, 0, sizeof(*head));
 	head->next = head->prev = head;
-	first_segment = segment = &cbfs_payload->segments;
+	first_segment = segment;
+	//first_segment = segment = &cbfs_payload->segments;
 
 	while(1) {
 		printk(BIOS_DEBUG, "Loading segment from rom address 0x%p\n", segment);
@@ -292,17 +315,11 @@ static int build_self_segment_list(
 		/* We have found another CODE, DATA or BSS segment */
 		segment++;
 
-		/* Find place where to insert our segment */
-		for(ptr = head->next; ptr != head; ptr = ptr->next) {
-			if (new->s_srcaddr < ntohll(segment->load_addr))
-				break;
-		}
-
-		/* Order by stream offset */
-		new->next = ptr;
-		new->prev = ptr->prev;
-		ptr->prev->next = new;
-		ptr->prev = new;
+		/* Insert to end of the list */
+		new->next = head;
+		new->prev = head->prev;
+		head->prev->next = new;
+		head->prev = new;
 	}
 
 	return 1;
