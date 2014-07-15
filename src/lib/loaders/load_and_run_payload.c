@@ -58,9 +58,9 @@ struct payload *payload_load(void)
 				ops->name);
 			continue;
 		}
-		printk(BIOS_DEBUG, "%s: located payload @ %p, %zu bytes.\n",
-			ops->name, payload->backing_store.data,
-			payload->backing_store.size);
+		//printk(BIOS_DEBUG, "%s: located payload @ %p, %zu bytes.\n",
+		//	ops->name, payload->backing_store.data,
+		//	payload->backing_store.size);
 		break;
 	}
 
