@@ -24,8 +24,8 @@
 
 static int cbfs_locate_payload(struct payload *payload)
 {
-	void *buffer;
-	size_t size;
+	//void *buffer;
+	//size_t size;
 	const int type = CBFS_TYPE_PAYLOAD;
 	struct cbfs_media default_media, *m;
 	struct cbfs_file_handle fh;
@@ -35,7 +35,7 @@ static int cbfs_locate_payload(struct payload *payload)
 	if (m == CBFS_DEFAULT_MEDIA) {
 		m = &default_media;
 		if (init_default_cbfs_media(m) != 0) {
-			ERROR("Failed to initialize default media\n");
+			//printk(BIOS_SPEW, "Failed to initialize default media\n");
 			return -1;
 		}
 	}
@@ -43,7 +43,7 @@ static int cbfs_locate_payload(struct payload *payload)
 	c = cbfs_find_file(m, &fh, payload->name, type);
 
 	if (c < 0) {
-		ERROR("File not found\n");
+		//printk(BIOS_SPEW, "File not found\n");
 		return -1;
 	}
 

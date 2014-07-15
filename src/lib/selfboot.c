@@ -45,6 +45,7 @@ struct segment {
 	unsigned long s_srcaddr;
 	unsigned long s_memsz;
 	unsigned long s_filesz;
+	unsigned long s_offset;
 	int compression;
 };
 
@@ -143,6 +144,7 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 			seg->s_memsz -= len;
 			seg->s_dstaddr += len;
 			seg->s_srcaddr += len;
+			seg->s_offset += len;
 			if (seg->s_filesz > len) {
 				new->s_filesz = len;
 				seg->s_filesz -= len;
@@ -179,6 +181,7 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 			new->s_memsz -= len;
 			new->s_dstaddr += len;
 			new->s_srcaddr += len;
+			new->s_offset += len;
 			if (seg->s_filesz > len) {
 				seg->s_filesz = len;
 				new->s_filesz -= len;
@@ -216,10 +219,10 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 
 static int build_self_segment_list(
 	struct segment *head,
-	struct payload *payload, uintptr_t *entry)
+	struct payload *payload, struct cbfs_payload_segment *segment, uintptr_t *entry)
 {
 	struct segment *new;
-	struct cbfs_payload_segment *segment, *first_segment;
+	struct cbfs_payload_segment *first_segment;
 	struct cbfs_media default_media, *media;
 	int value_read;
 	media = payload->media;
@@ -227,7 +230,7 @@ static int build_self_segment_list(
 	if (media == CBFS_DEFAULT_MEDIA) {
 		media = &default_media;
 		if (init_default_cbfs_media(media) != 0) {
-			ERROR("Failed to initialize media\n");
+			printk(BIOS_DEBUG, "Failed to initialize media\n");
 			return -1;
 		}
 	}
@@ -235,13 +238,13 @@ static int build_self_segment_list(
 	media->open(media);
 	//reading metadata for payload stage
 	value_read = media->read(media, (void *)segment, payload->f.data_offset,
-			sizeof(*segment)); 
+			sizeof(*segment));
 	media->close(media);
 	if (value_read != sizeof(*segment)) {
-		ERROR("Read for payload metadata not successful");
+		printk(BIOS_DEBUG, "Read for payload metadata not successful");
 		return -1;
 	}
-	
+
 	//cbfs_payload = payload->backing_store.data;
 	memset(head, 0, sizeof(*head));
 	head->next = head->prev = head;
@@ -270,6 +273,7 @@ static int build_self_segment_list(
 				((unsigned char *)first_segment)
 				+ ntohl(segment->offset);
 			new->s_filesz = ntohl(segment->len);
+			new->s_offset = ntohl(segment->offset);
 			printk(BIOS_DEBUG, "  New segment dstaddr 0x%lx memsize 0x%lx srcaddr 0x%lx filesize 0x%lx\n",
 				new->s_dstaddr, new->s_memsz, new->s_srcaddr, new->s_filesz);
 			/* Clean up the values */
@@ -291,6 +295,7 @@ static int build_self_segment_list(
 				+ ntohl(segment->offset);
 			new->s_dstaddr = ntohll(segment->load_addr);
 			new->s_memsz = ntohl(segment->mem_len);
+			new->s_offset = ntohl(segment->offset);
 			break;
 
 		case PAYLOAD_SEGMENT_ENTRY:
@@ -332,6 +337,8 @@ static int load_self_segments(
 	struct segment *ptr;
 	const unsigned long one_meg = (1UL << 20);
 	unsigned long bounce_high = lb_end;
+	struct cbfs_media *media;
+	media = payload->media;
 
 	for(ptr = head->next; ptr != head; ptr = ptr->next) {
 		if (bootmem_region_targets_usable_ram(ptr->s_dstaddr,
@@ -401,18 +408,24 @@ static int load_self_segments(
 		if (ptr->s_filesz) {
 			unsigned char *middle, *end;
 			size_t len;
+			void *v_map;
+			int v_read;
 			len = ptr->s_filesz;
 			switch(ptr->compression) {
 				case CBFS_COMPRESS_LZMA: {
 					printk(BIOS_DEBUG, "using LZMA\n");
+					media->open(media);
+					v_map = media->map(media, ptr->s_offset, ptr->s_memsz);
 					len = ulzma(src, dest);
 					if (!len) /* Decompression Error. */
 						return 0;
 					break;
 				}
 				case CBFS_COMPRESS_NONE: {
-					printk(BIOS_DEBUG, "it's not compressed!\n");
-					memcpy(dest, src, len);
+					printk(BIOS_DEBUG, "it's not compressed! hence read it directly!\n");
+					v_read = media->read(media, dest, ptr->s_offset, len);
+					if (v_read != len)
+						return -1;
 					break;
 				}
 				default:
@@ -462,9 +475,10 @@ void *selfload(struct payload *payload)
 {
 	uintptr_t entry = 0;
 	struct segment head;
-
+	struct cbfs_payload_segment *segment;
+	segment = malloc(sizeof(struct cbfs_payload_segment));
 	/* Preprocess the self segments */
-	if (!build_self_segment_list(&head, payload, &entry))
+	if (!build_self_segment_list(&head, payload, segment, &entry))
 		goto out;
 
 	/* Load the segments */
