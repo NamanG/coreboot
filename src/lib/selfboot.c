@@ -338,7 +338,18 @@ static int load_self_segments(
 	struct cbfs_media *media;
 	const unsigned long one_meg = (1UL << 20);
 	unsigned long bounce_high = lb_end;
+	struct cbfs_media default_media;
 	media = payload->media;
+	
+	if (media == CBFS_DEFAULT_MEDIA) {
+		media = &default_media;
+		if (init_default_cbfs_media(media) != 0) {
+			printk(BIOS_ERR, "Failed to initialize media\n");
+			return -1;
+		}
+	}
+	
+	
 	for(ptr = head->next; ptr != head; ptr = ptr->next) {
 		if (bootmem_region_targets_usable_ram(ptr->s_dstaddr,
 							ptr->s_memsz))
@@ -414,8 +425,10 @@ static int load_self_segments(
 					printk(BIOS_DEBUG, "using LZMA\n");
 					media->open(media);
 					printk(BIOS_DEBUG, "Map attempt\n");
-					v_map = media->map(media, payload->f.data_offset + sizeof(struct segment), len);		
-					
+					printk(BIOS_DEBUG, "Offset of segment is 0x%lx\n", ptr->s_offset);
+					printk(BIOS_DEBUG, "Offset for mapping is 0x%lx\n", payload->f.data_offset + ptr->s_offset);
+					v_map = media->map(media, payload->f.data_offset + ptr->s_offset, len);
+
 					printk(BIOS_DEBUG, "Map successful\n");
 					len = ulzma(src, dest);
 					media->close(media);
@@ -425,8 +438,7 @@ static int load_self_segments(
 				}
 				case CBFS_COMPRESS_NONE: {
 					printk(BIOS_DEBUG, "it's not compressed! hence read directly\n");
-					v_read = media->read(media, dest, payload->f.data_offset + sizeof(struct segment)
-							+ ptr->s_offset, len);
+					v_read = media->read(media, dest, payload->f.data_offset + ptr->s_offset, len);
 					break;
 				}
 				default:
