@@ -42,7 +42,6 @@ struct segment {
 	struct segment *next;
 	struct segment *prev;
 	unsigned long s_dstaddr;
-	unsigned long s_srcaddr;
 	unsigned long s_memsz;
 	unsigned long s_filesz;
 	unsigned long s_offset;
@@ -143,7 +142,6 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 			new->s_memsz = len;
 			seg->s_memsz -= len;
 			seg->s_dstaddr += len;
-			seg->s_srcaddr += len;
 			seg->s_offset += len;
 			if (seg->s_filesz > len) {
 				new->s_filesz = len;
@@ -180,7 +178,6 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 			seg->s_memsz = len;
 			new->s_memsz -= len;
 			new->s_dstaddr += len;
-			new->s_srcaddr += len;
 			new->s_offset += len;
 			if (seg->s_filesz > len) {
 				seg->s_filesz = len;
@@ -219,14 +216,15 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 
 static int build_self_segment_list(
 	struct segment *head,
-	struct payload *payload, struct cbfs_payload_segment *segment, uintptr_t *entry)
+	struct payload *payload, uintptr_t *entry)
 {
 	struct segment *new;
-	struct cbfs_payload_segment *first_segment;
+	struct cbfs_payload_segment segment;
 	struct cbfs_media default_media, *media;
-	int value_read;
+	unsigned long current_offset;
+
 	media = payload->media;
-	/* is there required here? */
+	
 	if (media == CBFS_DEFAULT_MEDIA) {
 		media = &default_media;
 		if (init_default_cbfs_media(media) != 0) {
@@ -234,91 +232,83 @@ static int build_self_segment_list(
 			return -1;
 		}
 	}
-
-	media->open(media);
-	//reading metadata for payload stage
-	value_read = media->read(media, (void *)segment, payload->f.data_offset,
-			sizeof(*segment));
-	media->close(media);
-	if (value_read != sizeof(*segment)) {
-		printk(BIOS_ERR, "Read for payload metadata not successful");
-		return -1;
-	}
-
-	//cbfs_payload = payload->backing_store.data;
+	printk(BIOS_DEBUG, "In build_self_segment\n");
 	memset(head, 0, sizeof(*head));
 	head->next = head->prev = head;
-	first_segment = segment;
-	//first_segment = segment = &cbfs_payload->segments;
-
-	while(1) {
-		printk(BIOS_DEBUG, "Loading segment from rom address 0x%p\n", segment);
-		switch(segment->type) {
+	
+	current_offset = payload->f.data_offset;
+	
+	printk(BIOS_DEBUG, "Opening media?\n");
+	media->open(media);
+	printk(BIOS_DEBUG, "Open-ed media?\n");
+	while(media->read(media, &segment, current_offset, sizeof(segment)) == sizeof(segment)) {
+	//reading metadata for payload stage
+		printk(BIOS_DEBUG, "Read successful\n");
+		printk(BIOS_DEBUG, "Loading segment from rom address 0x%p\n", &segment);
+		segment.compression = ntohl(segment.compression);
+		segment.offset = ntohl(segment.offset);
+		segment.load_addr = ntohll(segment.load_addr);
+		segment.len = ntohl(segment.len);
+		segment.mem_len = ntohl(segment.mem_len);
+		
+		switch(segment.type) {
 		case PAYLOAD_SEGMENT_PARAMS:
 			printk(BIOS_DEBUG, "  parameter section (skipped)\n");
-			segment++;
+			current_offset += sizeof(segment);
 			continue;
 
 		case PAYLOAD_SEGMENT_CODE:
 		case PAYLOAD_SEGMENT_DATA:
 			printk(BIOS_DEBUG, "  %s (compression=%x)\n",
-					segment->type == PAYLOAD_SEGMENT_CODE ?  "code" : "data",
-					ntohl(segment->compression));
+					segment.type == PAYLOAD_SEGMENT_CODE ?  "code" : "data",
+					segment.compression);
 			new = malloc(sizeof(*new));
-			new->s_dstaddr = ntohll(segment->load_addr);
-			new->s_memsz = ntohl(segment->mem_len);
-			new->compression = ntohl(segment->compression);
-
-			new->s_srcaddr = (uintptr_t)
-				((unsigned char *)first_segment)
-				+ ntohl(segment->offset);
-			new->s_filesz = ntohl(segment->len);
-			new->s_offset = ntohl(segment->offset);
-			printk(BIOS_DEBUG, "  New segment dstaddr 0x%lx memsize 0x%lx srcaddr 0x%lx filesize 0x%lx\n",
-				new->s_dstaddr, new->s_memsz, new->s_srcaddr, new->s_filesz);
+			new->s_dstaddr = segment.load_addr;
+			new->s_memsz = segment.mem_len;
+			new->compression = segment.compression;
+			new->s_filesz = segment.len;
+			new->s_offset = segment.offset;
+			printk(BIOS_DEBUG, "  New segment dstaddr 0x%lx memsize 0x%lx segment_offset 0x%lx filesize 0x%lx\n",
+				new->s_dstaddr, new->s_memsz, new->s_offset, new->s_filesz);
 			/* Clean up the values */
 			if (new->s_filesz > new->s_memsz)  {
 				new->s_filesz = new->s_memsz;
 			}
-			printk(BIOS_DEBUG, "  (cleaned up) New segment addr 0x%lx size 0x%lx offset 0x%lx filesize 0x%lx\n",
-				new->s_dstaddr, new->s_memsz, new->s_srcaddr, new->s_filesz);
+			printk(BIOS_DEBUG, "  (cleaned up) New segment addr 0x%lx size 0x%lx segment_offset 0x%lx filesize 0x%lx\n",
+				new->s_dstaddr, new->s_memsz, new->s_offset, new->s_filesz);
 			break;
 
 		case PAYLOAD_SEGMENT_BSS:
-			printk(BIOS_DEBUG, "  BSS 0x%p (%d byte)\n", (void *)
-					(intptr_t)ntohll(segment->load_addr),
-				 	ntohl(segment->mem_len));
+			printk(BIOS_DEBUG, "  BSS 0x%p (%d byte)\n",
+					(void *)(intptr_t)segment.load_addr, segment.mem_len);
 			new = malloc(sizeof(*new));
 			new->s_filesz = 0;
-			new->s_srcaddr = (uintptr_t)
-				((unsigned char *)first_segment)
-				+ ntohl(segment->offset);
-			new->s_dstaddr = ntohll(segment->load_addr);
-			new->s_memsz = ntohl(segment->mem_len);
-			new->s_offset = ntohl(segment->offset);
+			new->s_dstaddr = segment.load_addr;
+			new->s_memsz = segment.mem_len;
+			new->s_offset = segment.offset;
 			break;
 
 		case PAYLOAD_SEGMENT_ENTRY:
 			printk(BIOS_DEBUG, "  Entry Point 0x%p\n",
-			       (void *)(intptr_t)ntohll(segment->load_addr));
-			*entry =  ntohll(segment->load_addr);
+			       (void *)(intptr_t)segment.load_addr);
+			*entry =  segment.load_addr;
 			/* Per definition, a payload always has the entry point
 			 * as last segment. Thus, we use the occurrence of the
 			 * entry point as break condition for the loop.
 			 * Can we actually just look at the number of section?
-			 */
+		 	*/
 			return 1;
 
 		default:
 			/* We found something that we don't know about. Throw
 			 * hands into the sky and run away!
 			 */
-			printk(BIOS_EMERG, "Bad segment type %x\n", segment->type);
+			printk(BIOS_EMERG, "Bad segment type %x\n", segment.type);
 			return -1;
 		}
 
 		/* We have found another CODE, DATA or BSS segment */
-		segment++;
+		current_offset += sizeof(segment); 
 
 		/* Insert to end of the list */
 		new->next = head;
@@ -326,7 +316,7 @@ static int build_self_segment_list(
 		head->prev->next = new;
 		head->prev = new;
 	}
-
+	media->close(media);
 	return 1;
 }
 
@@ -340,7 +330,7 @@ static int load_self_segments(
 	unsigned long bounce_high = lb_end;
 	struct cbfs_media default_media;
 	media = payload->media;
-	
+
 	if (media == CBFS_DEFAULT_MEDIA) {
 		media = &default_media;
 		if (init_default_cbfs_media(media) != 0) {
@@ -348,8 +338,8 @@ static int load_self_segments(
 			return -1;
 		}
 	}
-	
-	
+
+
 	for(ptr = head->next; ptr != head; ptr = ptr->next) {
 		if (bootmem_region_targets_usable_ram(ptr->s_dstaddr,
 							ptr->s_memsz))
@@ -396,7 +386,7 @@ static int load_self_segments(
 	payload->bounce.size = bounce_size;
 
 	for(ptr = head->next; ptr != head; ptr = ptr->next) {
-		unsigned char *dest, *src;
+		unsigned char *dest;
 		printk(BIOS_DEBUG, "Loading Segment: addr: 0x%016lx memsz: 0x%016lx filesz: 0x%016lx\n",
 			ptr->s_dstaddr, ptr->s_memsz, ptr->s_filesz);
 
@@ -412,7 +402,6 @@ static int load_self_segments(
 
 		/* Compute the boundaries of the segment */
 		dest = (unsigned char *)(ptr->s_dstaddr);
-		src = (unsigned char *)(ptr->s_srcaddr);
 		int v_read;
 		void *v_map;
 		/* Copy data from the initial buffer */
@@ -425,12 +414,9 @@ static int load_self_segments(
 					printk(BIOS_DEBUG, "using LZMA\n");
 					media->open(media);
 					printk(BIOS_DEBUG, "Map attempt\n");
-					printk(BIOS_DEBUG, "Offset of segment is 0x%lx\n", ptr->s_offset);
-					printk(BIOS_DEBUG, "Offset for mapping is 0x%lx\n", payload->f.data_offset + ptr->s_offset);
 					v_map = media->map(media, payload->f.data_offset + ptr->s_offset, len);
-
 					printk(BIOS_DEBUG, "Map successful\n");
-					len = ulzma(src, dest);
+					len = ulzma(v_map, dest);
 					media->close(media);
 					if (!len) /* Decompression Error. */
 						return 0;
@@ -438,7 +424,9 @@ static int load_self_segments(
 				}
 				case CBFS_COMPRESS_NONE: {
 					printk(BIOS_DEBUG, "it's not compressed! hence read directly\n");
+					media->open(media);
 					v_read = media->read(media, dest, payload->f.data_offset + ptr->s_offset, len);
+					media->close(media);
 					break;
 				}
 				default:
@@ -447,11 +435,10 @@ static int load_self_segments(
 			}
 			end = dest + ptr->s_memsz;
 			middle = dest + len;
-			printk(BIOS_SPEW, "[ 0x%08lx, %08lx, 0x%08lx) <- %08lx\n",
+			printk(BIOS_SPEW, "[ 0x%08lx, %08lx, 0x%08lx)\n",
 				(unsigned long)dest,
 				(unsigned long)middle,
-				(unsigned long)end,
-				(unsigned long)src);
+				(unsigned long)end);
 
 			/* Zero the extra bytes between middle & end */
 			if (middle < end) {
@@ -488,12 +475,9 @@ void *selfload(struct payload *payload)
 {
 	uintptr_t entry = 0;
 	struct segment head;
-	struct cbfs_payload_segment *segment;
-
-	segment = malloc(sizeof(struct cbfs_payload_segment));
 
 	/* Preprocess the self segments */
-	if (!build_self_segment_list(&head, payload, segment, &entry))
+	if (!build_self_segment_list(&head, payload, &entry))
 		goto out;
 
 	/* Load the segments */
