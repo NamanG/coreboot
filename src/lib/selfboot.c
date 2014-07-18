@@ -237,7 +237,7 @@ static int build_self_segment_list(
 	head->next = head->prev = head;
 
 	current_offset = payload->f.data_offset;
-	
+
 	printk(BIOS_DEBUG, "payload->media is %p\n",media);
 	media->open(media);
 	printk(BIOS_DEBUG, "Open-ed media?\n");
