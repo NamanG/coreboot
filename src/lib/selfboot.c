@@ -224,7 +224,7 @@ static int build_self_segment_list(
 	unsigned long current_offset;
 
 	media = payload->media;
-	
+
 	if (media == CBFS_DEFAULT_MEDIA) {
 		media = &default_media;
 		if (init_default_cbfs_media(media) != 0) {
@@ -235,10 +235,10 @@ static int build_self_segment_list(
 	printk(BIOS_DEBUG, "In build_self_segment\n");
 	memset(head, 0, sizeof(*head));
 	head->next = head->prev = head;
-	
+
 	current_offset = payload->f.data_offset;
 	
-	printk(BIOS_DEBUG, "Opening media?\n");
+	printk(BIOS_DEBUG, "payload->media is %p\n",media);
 	media->open(media);
 	printk(BIOS_DEBUG, "Open-ed media?\n");
 	while(media->read(media, &segment, current_offset, sizeof(segment)) == sizeof(segment)) {
@@ -250,7 +250,7 @@ static int build_self_segment_list(
 		segment.load_addr = ntohll(segment.load_addr);
 		segment.len = ntohl(segment.len);
 		segment.mem_len = ntohl(segment.mem_len);
-		
+
 		switch(segment.type) {
 		case PAYLOAD_SEGMENT_PARAMS:
 			printk(BIOS_DEBUG, "  parameter section (skipped)\n");
@@ -308,7 +308,7 @@ static int build_self_segment_list(
 		}
 
 		/* We have found another CODE, DATA or BSS segment */
-		current_offset += sizeof(segment); 
+		current_offset += sizeof(segment);
 
 		/* Insert to end of the list */
 		new->next = head;

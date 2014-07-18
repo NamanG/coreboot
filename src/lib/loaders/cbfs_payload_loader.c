@@ -18,6 +18,9 @@
  * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#include <stdint.h>
+#include <stdlib.h>
+#include <console/console.h>
 #include <cbfs.h>
 #include <payload_loader.h>
 #include <cbfs_core.h>
@@ -46,8 +49,8 @@ static int cbfs_locate_payload(struct payload *payload)
 		//ERROR("File not found\n");
 		return -1;
 	}
-
-	payload->media = m;
+	printk(BIOS_DEBUG, "It returned to cbfs_locate_payload\n");
+	payload->media = CBFS_DEFAULT_MEDIA;
 	payload->f = fh;
 	//payload->backing_store.data = &fh;
 	//payload->backing_store.size = fh.data_len;

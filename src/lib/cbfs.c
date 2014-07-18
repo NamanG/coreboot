@@ -120,7 +120,7 @@ void *cbfs_load_optionrom(struct cbfs_media *media, uint16_t vendor,
  */
 void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 {
-	struct cbfs_file_handler f;
+	struct cbfs_file_handle f;
 	struct cbfs_stage stage;
 	int c;
 	ssize_t value_read;
@@ -137,7 +137,11 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 	}
 
 	c = cbfs_find_file(media, &f, name, CBFS_TYPE_STAGE);
-	if (c == 0) {
+	if (c < 0) {
+		ERROR("Stage not loaded\n");
+		return (void *)-1;
+	}
+
 	value_read = media->read(media, &stage, f.data_offset, sizeof(stage));
 	/* this is a mess. There is no ntohll. */
 	/* for now, assume compatible byte order until we solve this. */
@@ -179,11 +183,6 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 
 	entry = stage.entry;
 	return (void *) entry;
-	}
-	else {
-		ERROR("Stage not loaded.\n");
-		return (void *)-1;
-	}
 }
 
 /* Simple buffer */

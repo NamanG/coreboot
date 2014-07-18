@@ -190,8 +190,7 @@ struct cbfs_optionrom {
 #define CBFS_MEDIA_INVALID_MAP_ADDRESS	((void*)(0xffffffff))
 #define CBFS_DEFAULT_MEDIA		((void*)(0x0))
 
-struct cbfs_file_handler{
-	uint32_t found;
+struct cbfs_file_handle{
 	uint32_t data_offset;
 	uint32_t data_len;
 	struct cbfs_file file;
@@ -240,7 +239,7 @@ int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header);
 
 /*Returns success (0) on finding the file requested by verifying name/type; -1 if file not found
  The absolute data_offset to the file is stored*/
-int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const char *name, int type);
+int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name, int type);
 
 
 /* returns pointer to file content inside CBFS after verifying if type is correct */

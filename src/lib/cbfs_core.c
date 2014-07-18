@@ -85,7 +85,7 @@ int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header)
 /* This functions finds the absolute data_offset of a file searched for by name/type
    Returns 0 on success and -1 on failure
  */
-int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const char *name, int type)
+int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name, int type)
 {
 	uint32_t offset, align, romsize,name_len;
 	struct cbfs_media default_media;
@@ -116,7 +116,6 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 #if defined(CONFIG_ARCH_X86) && CONFIG_ARCH_X86
 	romsize -= htonl(header.bootblocksize);
 #endif
-	int catch;
 	DEBUG("CBFS location: 0x%x~0x%x, align: %d\n", offset, romsize, align);
 	DEBUG("Looking for '%s' starting from 0x%x.\n", name, offset);
 	media->open(media);
@@ -143,7 +142,6 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 			//continuing with new offset
 		}
 
-		f->found = -1;
 		if(f->file.type == type){
 
 			name_len = f->file.offset - sizeof(f->file);
@@ -154,13 +152,11 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
 			if (file_name == CBFS_MEDIA_INVALID_MAP_ADDRESS) {
 				ERROR("ERROR: Failed to get filename: 0x%x.\n", offset);
 			} else if (strcmp(file_name, name) == 0) {
-					f->found = 0;
 					f->data_offset = offset + f->file.offset;
 					f->data_len = f->file.len;
 					media->unmap(media, file_name);
 					DEBUG("Found file:offset = 0x%x, len=%d\n", f->data_offset, f->data_len);
-					catch = f->found;
-					return catch;
+					return 0;
 			} else {
 				DEBUG("unmatched file offset = 0x%x : %s\n", offset, file_name);
 				media->unmap(media,file_name);
@@ -181,7 +177,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handler *f, const 
  */
 void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type, size_t *sz)
 {
-	struct cbfs_file_handler f;
+	struct cbfs_file_handle f;
 	int c;
 	struct cbfs_media default_media;
 
@@ -205,7 +201,7 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 
 	if (sz)
 		*sz = f.data_len;
-	return media->map(media, f.data_offset, f.data_len + f.file.offset);
+	return media->map(media, f.data_offset, f.data_len);
 	}
 	else {
 		DEBUG("condition not successful\n");

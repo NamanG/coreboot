@@ -68,7 +68,7 @@ struct payload *payload_load(void)
 		return NULL;
 
 	mirror_payload(payload);
-
+	printk(BIOS_DEBUG, "Returned to payload_load. calling selfload()\n");
 	entry = selfload(payload);
 
 	if (entry == NULL)
