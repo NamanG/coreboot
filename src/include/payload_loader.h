@@ -2,6 +2,7 @@
  * This file is part of the coreboot project.
  *
  * Copyright (C) 2014 Google Inc.
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +22,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <cbfs_core.h>
 
 struct buffer_area {
 	void *data;
@@ -32,6 +34,8 @@ struct payload {
 	struct buffer_area backing_store;
 	/* Used when payload wants memory coreboot ramstage is running at. */
 	struct buffer_area bounce;
+	struct cbfs_media *media;
+	struct cbfs_file_handle f;
 	void *entry;
 };
 

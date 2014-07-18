@@ -3,7 +3,7 @@
  *
  * Copyright (C) 2003 Eric W. Biederman <ebiederm@xmission.com>
  * Copyright (C) 2009 Ron Minnich <rminnich@gmail.com>
- *
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; version 2 of the License.
@@ -28,6 +28,7 @@
 #include <lib.h>
 #include <bootmem.h>
 #include <payload_loader.h>
+#include <cbfs_core.h>
 
 /* from ramstage.ld: */
 extern unsigned char _ram_seg;
@@ -40,9 +41,9 @@ struct segment {
 	struct segment *next;
 	struct segment *prev;
 	unsigned long s_dstaddr;
-	unsigned long s_srcaddr;
 	unsigned long s_memsz;
 	unsigned long s_filesz;
+	unsigned long s_offset;
 	int compression;
 };
 
@@ -65,6 +66,102 @@ struct segment {
  * - The implementation is still relatively simple,
  *   and much simpler than the general case implemented in kexec.
  */
+
+struct sb_helper {
+	int (*init)(struct sb_helper *sbh, struct payload *payload);
+	int (*open)(struct payload *payload);
+	int (*close)(struct payload *payload);
+	size_t (*read)(struct payload *payload, void *dest, size_t offset, size_t size);
+	void *(*map)(struct payload *payload, size_t offset, size_t size);
+	void *sb_media;
+};
+
+static struct cbfs_media default_media;
+
+static int init_cbfs(struct sb_helper *sbh, struct payload *payload)
+{
+	/*Backing store is in use hence no loading via cbfs
+	*/
+	if (payload->backing_store.data != NULL)
+		return 0;
+	if (payload->media == CBFS_DEFAULT_MEDIA) {
+		sbh->sb_media = &default_media;
+		if (init_default_cbfs_media(payload->media) != 0) {
+			printk(BIOS_ERR, "Failed to initialize media\n");
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static size_t cbfs_read(struct payload *payload, void *dest, size_t offset, size_t size)
+{
+	return payload->media->read(payload->media, dest, offset, size);
+}
+
+static void *cbfs_map(struct payload *payload, size_t offset, size_t size)
+{
+	return payload->media->map(payload->media, offset, size);
+}
+
+static int cbfs_open(struct payload *payload)
+{
+	payload->media->open(payload->media);
+	return 0;
+}
+
+static int cbfs_close(struct payload *payload)
+{
+	payload->media->close(payload->media);
+	return 0;
+}
+
+static int init_backing_store(struct sb_helper *sbh, struct payload *payload)
+{
+	if (payload->backing_store.data != NULL)
+		return 1;
+	else
+		return 0;
+}
+
+static size_t backing_store_read(struct payload *payload, void *dest, size_t offset, size_t size)
+{
+	memcpy(dest, (void *)payload->backing_store.data + offset, size);
+	return size;
+}
+
+static void *backing_store_map(struct payload *payload, size_t offset, size_t size)
+{
+	return (void *)payload->backing_store.data + offset;
+}
+
+static int backing_store_open(struct payload *payload)
+{
+	return 0;
+}
+
+static int backing_store_close(struct payload *payload)
+{
+	return 0;
+}
+
+struct sb_helper cbfs_helper = {
+	.init = init_cbfs,
+	.open = cbfs_open,
+	.close = cbfs_close,
+	.read = cbfs_read,
+	.map = cbfs_map,
+	.sb_media = &default_media,
+};
+
+struct sb_helper backing_store_helper = {
+	.init = init_backing_store,
+	.open = backing_store_open,
+	.close = backing_store_close,
+	.read = backing_store_read,
+	.map = backing_store_map,
+	.sb_media = NULL,
+};
 
 static unsigned long bounce_size, bounce_buffer;
 
@@ -140,7 +237,7 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 			new->s_memsz = len;
 			seg->s_memsz -= len;
 			seg->s_dstaddr += len;
-			seg->s_srcaddr += len;
+			seg->s_offset += len;
 			if (seg->s_filesz > len) {
 				new->s_filesz = len;
 				seg->s_filesz -= len;
@@ -176,7 +273,7 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 			seg->s_memsz = len;
 			new->s_memsz -= len;
 			new->s_dstaddr += len;
-			new->s_srcaddr += len;
+			new->s_offset += len;
 			if (seg->s_filesz > len) {
 				seg->s_filesz = len;
 				new->s_filesz -= len;
@@ -212,68 +309,95 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 }
 
 
+static struct sb_helper *get_selfboot_method(struct payload *payload)
+{
+	struct sb_helper sbh;
+	if (cbfs_helper.init(&sbh, payload))
+		return &cbfs_helper;
+	if (backing_store_helper.init(&sbh, payload))
+		return &backing_store_helper;
+	return NULL;
+}
+
 static int build_self_segment_list(
 	struct segment *head,
 	struct payload *payload, uintptr_t *entry)
 {
 	struct segment *new;
-	struct segment *ptr;
-	struct cbfs_payload_segment *segment, *first_segment;
-	struct cbfs_payload *cbfs_payload;
-	cbfs_payload = payload->backing_store.data;
+	struct cbfs_payload_segment segment;
+	unsigned long current_offset;
+	struct sb_helper *sbh;
+
+	if (payload->media == CBFS_DEFAULT_MEDIA) {
+		payload->media = &default_media;
+		if (init_default_cbfs_media(payload->media) != 0) {
+			printk(BIOS_ERR, "Failed to initialize media\n");
+			return -1;
+		}
+	}
+
+	sbh = get_selfboot_method(payload);
+
+	if (sbh != NULL) {
+
 	memset(head, 0, sizeof(*head));
 	head->next = head->prev = head;
-	first_segment = segment = &cbfs_payload->segments;
 
-	while(1) {
-		printk(BIOS_DEBUG, "Loading segment from rom address 0x%p\n", segment);
-		switch(segment->type) {
+	current_offset = payload->f.data_offset;
+	sbh->open(payload);
+
+	while(sbh->read(payload, &segment, current_offset, sizeof(segment))
+			== sizeof(segment)) {
+
+		printk(BIOS_DEBUG, "Reading segment from offset 0x%lx\n", current_offset);
+		segment.compression = ntohl(segment.compression);
+		segment.offset = ntohl(segment.offset);
+		segment.load_addr = ntohll(segment.load_addr);
+		segment.mem_len = ntohl(segment.mem_len);
+		segment.len = ntohl(segment.len);
+
+		switch(segment.type) {
 		case PAYLOAD_SEGMENT_PARAMS:
 			printk(BIOS_DEBUG, "  parameter section (skipped)\n");
-			segment++;
+			current_offset += sizeof(segment);
 			continue;
 
 		case PAYLOAD_SEGMENT_CODE:
 		case PAYLOAD_SEGMENT_DATA:
 			printk(BIOS_DEBUG, "  %s (compression=%x)\n",
-					segment->type == PAYLOAD_SEGMENT_CODE ?  "code" : "data",
-					ntohl(segment->compression));
+					segment.type == PAYLOAD_SEGMENT_CODE ?  "code" : "data",
+					segment.compression);
 			new = malloc(sizeof(*new));
-			new->s_dstaddr = ntohll(segment->load_addr);
-			new->s_memsz = ntohl(segment->mem_len);
-			new->compression = ntohl(segment->compression);
+			new->s_dstaddr = segment.load_addr;
+			new->s_memsz = segment.mem_len;
+			new->compression = segment.compression;
+			new->s_filesz = segment.len;
+			new->s_offset = segment.offset;
 
-			new->s_srcaddr = (uintptr_t)
-				((unsigned char *)first_segment)
-				+ ntohl(segment->offset);
-			new->s_filesz = ntohl(segment->len);
-			printk(BIOS_DEBUG, "  New segment dstaddr 0x%lx memsize 0x%lx srcaddr 0x%lx filesize 0x%lx\n",
-				new->s_dstaddr, new->s_memsz, new->s_srcaddr, new->s_filesz);
+			printk(BIOS_DEBUG, "  New segment dstaddr 0x%lx memsize 0x%lx src_offset 0x%lx filesize 0x%lx\n",
+				new->s_dstaddr, new->s_memsz, new->s_offset, new->s_filesz);
 			/* Clean up the values */
 			if (new->s_filesz > new->s_memsz)  {
 				new->s_filesz = new->s_memsz;
 			}
-			printk(BIOS_DEBUG, "  (cleaned up) New segment addr 0x%lx size 0x%lx offset 0x%lx filesize 0x%lx\n",
-				new->s_dstaddr, new->s_memsz, new->s_srcaddr, new->s_filesz);
+			printk(BIOS_DEBUG, "  (cleaned up) New segment addr 0x%lx size 0x%lx src_offset 0x%lx filesize 0x%lx\n",
+				new->s_dstaddr, new->s_memsz, new->s_offset, new->s_filesz);
 			break;
 
 		case PAYLOAD_SEGMENT_BSS:
-			printk(BIOS_DEBUG, "  BSS 0x%p (%d byte)\n", (void *)
-					(intptr_t)ntohll(segment->load_addr),
-				 	ntohl(segment->mem_len));
+			printk(BIOS_DEBUG, "  BSS 0x%p (%d byte)\n",
+					(void *)(intptr_t)segment.load_addr, segment.mem_len);
 			new = malloc(sizeof(*new));
 			new->s_filesz = 0;
-			new->s_srcaddr = (uintptr_t)
-				((unsigned char *)first_segment)
-				+ ntohl(segment->offset);
-			new->s_dstaddr = ntohll(segment->load_addr);
-			new->s_memsz = ntohl(segment->mem_len);
+			new->s_offset = segment.offset;
+			new->s_dstaddr = segment.load_addr;
+			new->s_memsz = segment.mem_len;
 			break;
 
 		case PAYLOAD_SEGMENT_ENTRY:
 			printk(BIOS_DEBUG, "  Entry Point 0x%p\n",
-			       (void *)(intptr_t)ntohll(segment->load_addr));
-			*entry =  ntohll(segment->load_addr);
+			       (void *)(intptr_t)segment.load_addr);
+			*entry = segment.load_addr;
 			/* Per definition, a payload always has the entry point
 			 * as last segment. Thus, we use the occurrence of the
 			 * entry point as break condition for the loop.
@@ -285,27 +409,26 @@ static int build_self_segment_list(
 			/* We found something that we don't know about. Throw
 			 * hands into the sky and run away!
 			 */
-			printk(BIOS_EMERG, "Bad segment type %x\n", segment->type);
+			printk(BIOS_EMERG, "Bad segment type %x\n", segment.type);
 			return -1;
 		}
 
 		/* We have found another CODE, DATA or BSS segment */
-		segment++;
+		current_offset += sizeof(segment);
 
-		/* Find place where to insert our segment */
-		for(ptr = head->next; ptr != head; ptr = ptr->next) {
-			if (new->s_srcaddr < ntohll(segment->load_addr))
-				break;
-		}
-
-		/* Order by stream offset */
-		new->next = ptr;
-		new->prev = ptr->prev;
-		ptr->prev->next = new;
-		ptr->prev = new;
+		/* Insert to the end of the list */
+		new->next = head;
+		new->prev = head->prev;
+		head->prev->next = new;
+		head->prev = new;
 	}
-
+	sbh->close(payload);
 	return 1;
+	}
+	else {
+		printk(BIOS_ERR, "Failed to build self_segments\n");
+		return -1;
+	}
 }
 
 static int load_self_segments(
@@ -315,6 +438,18 @@ static int load_self_segments(
 	struct segment *ptr;
 	const unsigned long one_meg = (1UL << 20);
 	unsigned long bounce_high = lb_end;
+	struct sb_helper *sbh;
+
+	if (payload->media == CBFS_DEFAULT_MEDIA) {
+		payload->media = &default_media;
+		if (init_default_cbfs_media(payload->media) != 0) {
+			printk(BIOS_ERR, "Failed to initialize media\n");
+			return -1;
+		}
+	}
+
+	sbh = get_selfboot_method(payload);
+	if (sbh != NULL) {
 
 	for(ptr = head->next; ptr != head; ptr = ptr->next) {
 		if (bootmem_region_targets_usable_ram(ptr->s_dstaddr,
@@ -362,7 +497,7 @@ static int load_self_segments(
 	payload->bounce.size = bounce_size;
 
 	for(ptr = head->next; ptr != head; ptr = ptr->next) {
-		unsigned char *dest, *src;
+		unsigned char *dest;
 		printk(BIOS_DEBUG, "Loading Segment: addr: 0x%016lx memsz: 0x%016lx filesz: 0x%016lx\n",
 			ptr->s_dstaddr, ptr->s_memsz, ptr->s_filesz);
 
@@ -378,7 +513,8 @@ static int load_self_segments(
 
 		/* Compute the boundaries of the segment */
 		dest = (unsigned char *)(ptr->s_dstaddr);
-		src = (unsigned char *)(ptr->s_srcaddr);
+		size_t v_read;
+		void *v_map;
 
 		/* Copy data from the initial buffer */
 		if (ptr->s_filesz) {
@@ -388,14 +524,31 @@ static int load_self_segments(
 			switch(ptr->compression) {
 				case CBFS_COMPRESS_LZMA: {
 					printk(BIOS_DEBUG, "using LZMA\n");
-					len = ulzma(src, dest);
+					printk(BIOS_DEBUG, "need to map first\n");
+					sbh->open(payload);
+					v_map = sbh->map(payload, payload->f.data_offset + ptr->s_offset,
+							len);
+
+					sbh->close(payload);
+					if (v_map == CBFS_MEDIA_INVALID_MAP_ADDRESS) {
+						printk(BIOS_ERR, "Failed to map\n");
+						return -1;
+					}
+					len = ulzma(v_map, dest);
 					if (!len) /* Decompression Error. */
 						return 0;
 					break;
 				}
 				case CBFS_COMPRESS_NONE: {
-					printk(BIOS_DEBUG, "it's not compressed!\n");
-					memcpy(dest, src, len);
+					printk(BIOS_DEBUG, "it's not compressed! hence read directly\n");
+					sbh->open(payload);
+					v_read = sbh->read(payload, dest, payload->f.data_offset + ptr->s_offset,
+							len);
+					sbh->close(payload);
+					if (v_read != len) {
+						printk(BIOS_ERR, "Reading of uncompressed segments not successful\n");
+						return -1;
+					}
 					break;
 				}
 				default:
@@ -404,11 +557,10 @@ static int load_self_segments(
 			}
 			end = dest + ptr->s_memsz;
 			middle = dest + len;
-			printk(BIOS_SPEW, "[ 0x%08lx, %08lx, 0x%08lx) <- %08lx\n",
+			printk(BIOS_SPEW, "[ 0x%08lx, %08lx, 0x%08lx )\n",
 				(unsigned long)dest,
 				(unsigned long)middle,
-				(unsigned long)end,
-				(unsigned long)src);
+				(unsigned long)end);
 
 			/* Zero the extra bytes between middle & end */
 			if (middle < end) {
@@ -439,6 +591,11 @@ static int load_self_segments(
 		}
 	}
 	return 1;
+	}
+	else {
+		printk(BIOS_ERR, "Failed to load self_segments\n");
+		return -1;
+	}
 }
 
 void *selfload(struct payload *payload)

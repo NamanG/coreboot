@@ -2,6 +2,7 @@
  * This file is part of the coreboot project.
  *
  * Copyright (C) 2014 Google Inc.
+ * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,21 +20,21 @@
 
 #include <cbfs.h>
 #include <payload_loader.h>
+#include <cbfs_core.h>
 
 static int cbfs_locate_payload(struct payload *payload)
 {
-	void *buffer;
-	size_t size;
 	const int type = CBFS_TYPE_PAYLOAD;
+	struct cbfs_media default_media, *m;
 
-	buffer = cbfs_get_file_content(CBFS_DEFAULT_MEDIA, payload->name,
-					type, &size);
-
-	if (buffer == NULL)
+	m = &default_media;
+	if (init_default_cbfs_media(m) != 0)
 		return -1;
 
-	payload->backing_store.data = buffer;
-	payload->backing_store.size = size;
+	if (cbfs_find_file(m, &payload->f, payload->name, type) < 0)
+		return -1;
+
+	payload->media = CBFS_DEFAULT_MEDIA;
 
 	return 0;
 }
