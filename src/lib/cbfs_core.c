@@ -1,6 +1,6 @@
 /*
  * This file is part of the coreboot project.
- *
+ * TEST
  * Copyright (C) 2011 secunet Security Networks AG
  * Copyright (C) 2013 The Chromium OS Authors. All rights reserved.
  * Copyright (C) 2014 Naman Govil <namangov@gmail.com>
