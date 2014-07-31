@@ -68,6 +68,104 @@ struct segment {
  *   and much simpler than the general case implemented in kexec.
  */
 
+struct sb_helper {
+	int (*init)(struct sb_helper *sbh, struct payload *payload);
+	int (*open)(struct payload *payload);
+	int (*close)(struct payload *payload);
+	size_t (*read)(struct payload *payload, void *dest, size_t offset, size_t size);
+	void *(*map)(struct payload *payload, size_t offset, size_t size);
+	void *sb_media;
+};
+
+static struct cbfs_media default_media;
+
+
+static int init_cbfs(struct sb_helper *sbh, struct payload *payload)
+{
+	/*To initialize booting via cbfs */
+	if (payload->backing_store.data != NULL)
+		return 0;
+	if (payload->media == CBFS_DEFAULT_MEDIA) {
+		sbh->sb_media = &default_media;
+		if (init_default_cbfs_media(sbh->sb_media) != 0) {
+			printk(BIOS_ERR, "Failed to initialize media\n");
+			return 0;
+		}
+	}
+	return 1;
+}
+
+static size_t cbfs_read(struct payload *payload, void *dest, size_t offset, size_t size)
+{
+	return payload->media->read(payload->media, dest, offset, size);
+}
+
+static void *cbfs_map(struct payload *payload, size_t offset, size_t size)
+{
+	return payload->media->map(payload->media, offset, size);
+}
+
+static int cbfs_open(struct payload *payload)
+{
+	printk(BIOS_DEBUG, "Opening Attempt\n");
+	payload->media->open(payload->media);
+	printk(BIOS_DEBUG,"Opened\n");
+	return 0;
+}
+
+static int cbfs_close(struct payload *payload)
+{
+	payload->media->close(payload->media);
+	return 0;
+}
+
+static int init_backing_store(struct sb_helper *sbh, struct payload *payload)
+{
+	if (payload->backing_store.data != NULL)
+		return 1;
+	else
+		return 0;
+}
+
+static size_t backing_store_read(struct payload *payload, void *dest, size_t offset, size_t size)
+{
+	memcpy(dest, (void *)payload->backing_store.data + offset, size);
+	return size;
+}
+
+static void *backing_store_map(struct payload *payload, size_t offset, size_t size)
+{
+	return (void *)payload->backing_store.data + offset;
+}
+
+static int backing_store_open(struct payload *payload)
+{
+	return 0;
+}
+
+static int backing_store_close(struct payload *payload)
+{
+	return 0;
+}
+
+struct sb_helper cbfs_helper = {
+	.init = init_cbfs,
+	.open = cbfs_open,
+	.close = cbfs_close,
+	.read = cbfs_read,
+	.map = cbfs_map,
+	.sb_media = &default_media,
+};
+
+struct sb_helper backing_store_helper = {
+	.init = init_backing_store,
+	.open = backing_store_open,
+	.close = backing_store_close,
+	.read = backing_store_read,
+	.map = backing_store_map,
+	.sb_media = NULL,
+};
+
 static unsigned long bounce_size, bounce_buffer;
 
 static void get_bounce_buffer(unsigned long req_size)
@@ -213,6 +311,16 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 	return ret;
 }
 
+static struct sb_helper *get_sb_method(struct payload *payload)
+{
+	struct sb_helper sbh;
+	printk(BIOS_DEBUG, "Inside get_sb_method\n");
+	if (cbfs_helper.init(&sbh, payload))
+		return &cbfs_helper;
+	if (backing_store_helper.init(&sbh, payload))
+		return &backing_store_helper;
+	return NULL;
+}
 
 static int build_self_segment_list(
 	struct segment *head,
@@ -220,28 +328,30 @@ static int build_self_segment_list(
 {
 	struct segment *new;
 	struct cbfs_payload_segment segment;
-	struct cbfs_media default_media, *media;
 	unsigned long current_offset;
+	struct sb_helper *sbh;
 
-	media = payload->media;
-
-	if (media == CBFS_DEFAULT_MEDIA) {
-		media = &default_media;
-		if (init_default_cbfs_media(media) != 0) {
+	if (payload->media == CBFS_DEFAULT_MEDIA) {
+		payload->media = &default_media;
+		if (init_default_cbfs_media(payload->media) != 0) {
 			printk(BIOS_ERR, "Failed to initialize media\n");
 			return -1;
 		}
 	}
-	printk(BIOS_DEBUG, "In build_self_segment\n");
+
+	sbh = get_sb_method(payload);
+	printk(BIOS_DEBUG, "Got sb_method\n");
+	if (sbh != NULL) {
+
+	//media = payload->media;
+
 	memset(head, 0, sizeof(*head));
 	head->next = head->prev = head;
-
+	printk(BIOS_DEBUG, "Inside successful condition\n");
 	current_offset = payload->f.data_offset;
-
-	printk(BIOS_DEBUG, "payload->media is %p\n",media);
-	media->open(media);
+	sbh->open(payload);
 	printk(BIOS_DEBUG, "Open-ed media?\n");
-	while(media->read(media, &segment, current_offset, sizeof(segment)) == sizeof(segment)) {
+	while(sbh->read(payload, &segment, current_offset, sizeof(segment)) == sizeof(segment)) {
 	//reading metadata for payload stage
 		printk(BIOS_DEBUG, "Read successful\n");
 		printk(BIOS_DEBUG, "Loading segment from rom address 0x%p\n", &segment);
@@ -316,8 +426,14 @@ static int build_self_segment_list(
 		head->prev->next = new;
 		head->prev = new;
 	}
-	media->close(media);
+	sbh->close(payload);
 	return 1;
+	}
+	else {
+		printk(BIOS_ERR, "ERROR!\n");
+		return -1;
+	}
+
 }
 
 static int load_self_segments(
@@ -325,15 +441,17 @@ static int load_self_segments(
 	struct payload *payload)
 {
 	struct segment *ptr;
-	struct cbfs_media *media;
+	//struct cbfs_media defamedia;
 	const unsigned long one_meg = (1UL << 20);
 	unsigned long bounce_high = lb_end;
-	struct cbfs_media default_media;
-	media = payload->media;
-
-	if (media == CBFS_DEFAULT_MEDIA) {
-		media = &default_media;
-		if (init_default_cbfs_media(media) != 0) {
+	struct sb_helper *sbh;
+	sbh = get_sb_method(payload);
+	if (sbh != NULL) {
+/*	media = payload->media;
+*/
+	if (payload->media == CBFS_DEFAULT_MEDIA) {
+		payload->media = &default_media;
+		if (init_default_cbfs_media(payload->media) != 0) {
 			printk(BIOS_ERR, "Failed to initialize media\n");
 			return -1;
 		}
@@ -412,21 +530,21 @@ static int load_self_segments(
 			switch(ptr->compression) {
 				case CBFS_COMPRESS_LZMA: {
 					printk(BIOS_DEBUG, "using LZMA\n");
-					media->open(media);
+					sbh->open(payload);
 					printk(BIOS_DEBUG, "Map attempt\n");
-					v_map = media->map(media, payload->f.data_offset + ptr->s_offset, len);
+					v_map = sbh->map(payload, payload->f.data_offset + ptr->s_offset, len);
 					printk(BIOS_DEBUG, "Map successful\n");
 					len = ulzma(v_map, dest);
-					media->close(media);
+					sbh->close(payload);
 					if (!len) /* Decompression Error. */
 						return 0;
 					break;
 				}
 				case CBFS_COMPRESS_NONE: {
 					printk(BIOS_DEBUG, "it's not compressed! hence read directly\n");
-					media->open(media);
-					v_read = media->read(media, dest, payload->f.data_offset + ptr->s_offset, len);
-					media->close(media);
+					sbh->open(payload);
+					v_read = sbh->read(payload, dest, payload->f.data_offset + ptr->s_offset, len);
+					sbh->close(payload);
 					break;
 				}
 				default:
@@ -469,6 +587,10 @@ static int load_self_segments(
 		}
 	}
 	return 1;
+	}
+	else {
+		return -1;
+	}
 }
 
 void *selfload(struct payload *payload)
