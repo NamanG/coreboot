@@ -235,12 +235,17 @@ int cbfs_decompress(int algo, void *src, void *dst, int len);
    return 0 on success and <0 if header not found */
 int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header);
 
-/* Returns success (0) on finding the file requested by verifying name/type;
+/* Returns success (0) on finding the file requested by verifying name;
   -1 if file not found
  The absolute data_offset to the file is stored */
 int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f,
-		const char *name, int type);
+		const char *name);
 
+/* Returns success (0) on finding the file requested by verifying name and type;
+  -1 if file not found
+ The absolute data_offset to the file is stored */
+int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f,
+		const char *name, int type);
 
 /* returns pointer to file content inside CBFS after verifying if type is correct */
 void *cbfs_get_file_content(struct cbfs_media *media, const char *name,

@@ -31,7 +31,7 @@ static int cbfs_locate_payload(struct payload *payload)
 	if (init_default_cbfs_media(m) != 0)
 		return -1;
 
-	if (cbfs_find_file(m, &payload->f, payload->name, type) < 0)
+	if (cbfs_find_file_by_type(m, &payload->f, payload->name, type) < 0)
 		return -1;
 
 	payload->media = CBFS_DEFAULT_MEDIA;
