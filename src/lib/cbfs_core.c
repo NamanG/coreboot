@@ -187,7 +187,7 @@ int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f,
 		ERROR("Failed to find file\n");
 		return -1;
 	}
-	
+
 	if (f->file.type == type) {
 		DEBUG("File of proper type has been found\n");
 		return 0;
@@ -239,7 +239,7 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 
 struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name)
 {
-	
+
 	struct cbfs_file_handle f;
 	struct cbfs_media default_media;
 	struct cbfs_file *fileptr;
