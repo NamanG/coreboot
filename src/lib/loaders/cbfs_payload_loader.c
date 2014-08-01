@@ -32,7 +32,6 @@ static int cbfs_locate_payload(struct payload *payload)
 	const int type = CBFS_TYPE_PAYLOAD;
 	struct cbfs_media default_media, *m;
 	struct cbfs_file_handle fh;
-	int c;
 	m = CBFS_DEFAULT_MEDIA;
 
 	if (m == CBFS_DEFAULT_MEDIA) {
@@ -43,12 +42,12 @@ static int cbfs_locate_payload(struct payload *payload)
 		}
 	}
 
-	c = cbfs_find_file(m, &fh, payload->name, type);
+	if (cbfs_find_file_by_type(m, &fh, payload->name, type) < 0 ) {
 
-	if (c < 0) {
 		//ERROR("File not found\n");
 		return -1;
 	}
+
 	printk(BIOS_DEBUG, "It returned to cbfs_locate_payload\n");
 	payload->media = CBFS_DEFAULT_MEDIA;
 	payload->f = fh;

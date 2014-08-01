@@ -239,7 +239,9 @@ int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header);
 
 /*Returns success (0) on finding the file requested by verifying name/type; -1 if file not found
  The absolute data_offset to the file is stored*/
-int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name, int type);
+int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name);
+
+int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name, int type);
 
 
 /* returns pointer to file content inside CBFS after verifying if type is correct */

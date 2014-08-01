@@ -85,7 +85,7 @@ int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header)
 /* This functions finds the absolute data_offset of a file searched for by name/type
    Returns 0 on success and -1 on failure
  */
-int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name, int type)
+int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name)
 {
 	uint32_t offset, align, romsize,name_len;
 	struct cbfs_media default_media;
@@ -142,8 +142,6 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const c
 			//continuing with new offset
 		}
 
-		if(f->file.type == type){
-
 			name_len = f->file.offset - sizeof(f->file);
 			DEBUG(" - load entry 0x%x file name (%d bytes)...\n", offset,name_len);
 			// load file name (arbitrary length).
@@ -161,7 +159,7 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const c
 				DEBUG("unmatched file offset = 0x%x : %s\n", offset, file_name);
 				media->unmap(media,file_name);
 			}
-		}
+
 		// Move to next file.
 		offset += f->file.len + f->file.offset;
 		if (offset % align)
@@ -172,6 +170,35 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f, const c
 	LOG("Warning: '%s' not found\n",name);
 	return -1;
 }
+
+
+int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f, const char *name, int type)
+{
+	struct cbfs_media default_media;
+
+	if (media == CBFS_DEFAULT_MEDIA) {
+		media = &default_media;
+		if (init_default_cbfs_media(media) != 0) {
+			ERROR("Failed to initialize default media.\n");
+			return -1;
+		}
+	}
+	if (cbfs_find_file(media, f, name) < 0) {
+		ERROR("Failed to find file\n");
+		return -1;
+	}
+	
+	if (f->file.type == type) {
+		DEBUG("File of proper type has been found\n");
+		return 0;
+	}
+	else
+	{
+		ERROR("File of proper type not found\n");
+		return -1;
+	}
+}
+
 
 /*Returns pointer to file content inside CBFS after verifying type
  */
@@ -188,7 +215,7 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 			return NULL;
 		}
 	}
-	c = cbfs_find_file(media, &f, name, type);
+	c = cbfs_find_file_by_type(media, &f, name, type);
 	if (c == 0){
 	DEBUG("Found file. Will be mapping it now!\n");
 	if (sz)
@@ -210,34 +237,27 @@ void *cbfs_get_file_content(struct cbfs_media *media, const char *name, int type
 	}
 }
 
-
-/*void cbfs_get_data(struct cbfs_media *media, const char *name, int type)
+struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name)
 {
-	struct cbfs_file_handler f;
-	ssize_t value_read;
-	int c;
-	c = cbfs_find_file(media, &f, name, type);
-	if (c == 0){
-		DEBUG("File has been found and can be read\n");
-		uint32_t loop_offset = f.data_offset + f.file.offset;
-		uint32_t loop_align = f.align;
-
-		while (f.data_len > 0){
-
-			struct cbfs_file file;
-			value_read = media->read(media, &file, loop_offset , sizeof(file));
-			loop_offset += file.len + file.offset;
-			if (loop_offset % loop_align)
-				loop_offset += loop_align = (loop_offset % loop_align);
-			f.data_len -= sizeof(file);
+	
+	struct cbfs_file_handle f;
+	struct cbfs_media default_media;
+	struct cbfs_file *fileptr;
+	if (media == CBFS_DEFAULT_MEDIA) {
+		media = &default_media;
+		if (init_default_cbfs_media(media) != 0) {
+			ERROR("Failed to initialize default media.\n");
+			return NULL;
 		}
 	}
-	else {
-		ERROR("File not found\n");
+	if (cbfs_find_file(media, &f, name) < 0) {
+		ERROR("Failed to find file\n");
+		return NULL;
 	}
 
+	fileptr = media->map(media, f.data_offset, f.data_len);
+	return fileptr;
 }
-*/
 
 int cbfs_decompress(int algo, void *src, void *dst, int len)
 {

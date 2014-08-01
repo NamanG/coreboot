@@ -136,7 +136,7 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 		}
 	}
 
-	c = cbfs_find_file(media, &f, name, CBFS_TYPE_STAGE);
+	c = cbfs_find_file_by_type(media, &f, name, CBFS_TYPE_STAGE);
 	if (c < 0) {
 		ERROR("Stage not loaded\n");
 		return (void *)-1;
