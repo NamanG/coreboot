@@ -153,9 +153,8 @@ static int smbios_write_type0(unsigned long *current, int handle)
 	{
 		struct cbfs_header header;
 		u32 romsize = CONFIG_ROM_SIZE;
-		if (!cbfs_get_header(CBFS_DEFAULT_MEDIA, &header)) {
+		if (!cbfs_get_header(CBFS_DEFAULT_MEDIA, &header))
 			romsize = header.romsize;
-			}
 		t->bios_rom_size = (romsize / 65535) - 1;
 	}
 

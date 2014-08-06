@@ -191,15 +191,6 @@ int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f,
 int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f,
 		const char *name, int type)
 {
-	struct cbfs_media default_media;
-
-	if (media == CBFS_DEFAULT_MEDIA) {
-		media = &default_media;
-		if (init_default_cbfs_media(media) != 0) {
-			ERROR("Failed to initialize default media/\n");
-			return -1;
-		}
-	}
 
 	if (cbfs_find_file(media, f, name) < 0) {
 		ERROR("Failed to find file\n");
@@ -211,10 +202,7 @@ int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f,
 		return 0;
 	}
 	else
-	{
-		ERROR("File of matching type not found\n");
 		return -1;
-	}
 }
 
 
@@ -277,8 +265,12 @@ struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name)
 		return NULL;
 	}
 
-	fileptr = media->map(media, f.data_offset, f.data_len);
-	return fileptr;
+	fileptr = media->map(media, f.data_offset - f.file.offset, f.data_len + f.file.offset);
+
+	if (fileptr == CBFS_MEDIA_INVALID_MAP_ADDRESS)
+		return NULL;
+	else
+		return fileptr;
 }
 
 int cbfs_decompress(int algo, void *src, void *dst, int len)

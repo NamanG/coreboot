@@ -126,29 +126,30 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 	void * data;
 	ssize_t v_read;
 	struct cbfs_media default_media;
+	const void * errorptr = (void *)-1;
 
 	if (media == CBFS_DEFAULT_MEDIA) {
 			media = &default_media;
 			if (init_default_cbfs_media(media) != 0) {
 			ERROR("Failed to initialize default media.\n");
-			return (void *)-1;
+			return errorptr;
 		}
 	}
 
 	c = cbfs_find_file_by_type(media, &f, name, CBFS_TYPE_STAGE);
 
 	if (c < 0) {
-		ERROR("Stage not loaded\n");
-		return (void *)-1;
+		ERROR("Stage not loaded.\n");
+		return errorptr;
 	}
 
 	value_read = media->read(media, &stage, f.data_offset, sizeof(stage));
 	/* this is a mess. There is no ntohll. */
 	/* for now, assume compatible byte order until we solve this. */
 	if (value_read != sizeof(stage))
-		return (void *)-1;
+		return errorptr;
 
-	uint32_t entry;
+	void * entry;
 	uint32_t final_size;
 
 	DEBUG("Read Complete @offset = 0x%x and length = %d\n",
@@ -166,7 +167,7 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 		v_read = media->read(media, (void *) (uintptr_t) stage.load,
 				f.data_offset + sizeof(stage), f.data_len);
 		if (v_read != f.data_len)
-			return (void *)-1;
+			return errorptr;
 
 		final_size = f.data_len;
 	}
@@ -174,7 +175,7 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 		data = media->map(media, f.data_offset + sizeof(stage), f.data_len);
 		if (data == CBFS_MEDIA_INVALID_MAP_ADDRESS) {
 			ERROR("Map not successful");
-			return (void *) -1;
+			return errorptr;
 		}
 
 		DEBUG("Map Done\n");
@@ -183,7 +184,7 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 				     stage.len);
 
 		if (!final_size)
-			return (void *) -1;
+			return errorptr;
 	}
 
 	/* Stages rely the below clearing so that the bss is initialized. */
@@ -191,8 +192,8 @@ void * cbfs_load_stage(struct cbfs_media *media, const char *name)
 	       stage.memlen - final_size);
 
 	DEBUG("stage loaded.\n");
-	entry = stage.entry;
-	return (void *) entry;
+	entry = (void *)(uintptr_t)stage.entry;
+	return entry;
 }
 
 /* Simple buffer */

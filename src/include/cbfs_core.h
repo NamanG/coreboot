@@ -232,18 +232,18 @@ struct cbfs_file *cbfs_get_file(struct cbfs_media *media, const char *name);
 int cbfs_decompress(int algo, void *src, void *dst, int len);
 
 /* finds the CBFS master header and fills it in a cbfs_header structure,
-   return 0 on success and <0 if header not found */
+ *  return 0 on success and <0 if header not found */
 int cbfs_get_header(struct cbfs_media *media, struct cbfs_header *header);
 
 /* Returns success (0) on finding the file requested by verifying name;
-  -1 if file not found
- The absolute data_offset to the file is stored */
+ * -1 if file not found
+ * The absolute data_offset to the file is stored */
 int cbfs_find_file(struct cbfs_media *media, struct cbfs_file_handle *f,
 		const char *name);
 
 /* Returns success (0) on finding the file requested by verifying name and type;
-  -1 if file not found
- The absolute data_offset to the file is stored */
+ * -1 if file not found
+ *  The absolute data_offset to the file is stored */
 int cbfs_find_file_by_type(struct cbfs_media *media, struct cbfs_file_handle *f,
 		const char *name, int type);
 
