@@ -86,8 +86,8 @@ static int init_cbfs(struct sb_helper *sbh, struct payload *payload)
 	if (payload->backing_store.data != NULL)
 		return 0;
 	if (payload->media == CBFS_DEFAULT_MEDIA) {
-		sbh->sb_media = &default_media;
-		if (init_default_cbfs_media(sbh->sb_media) != 0) {
+		payload->media = &default_media;
+		if (init_default_cbfs_media(payload->media) != 0) {
 			printk(BIOS_ERR, "Failed to initialize media\n");
 			return 0;
 		}
@@ -311,35 +311,35 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 	return ret;
 }
 
-static struct sb_helper *get_sb_method(struct payload *payload)
+static void get_sb_method(struct sb_helper *sbh, struct payload *payload)
 {
-	struct sb_helper sbh;
 	printk(BIOS_DEBUG, "Inside get_sb_method\n");
-	if (cbfs_helper.init(&sbh, payload))
-		return &cbfs_helper;
-	if (backing_store_helper.init(&sbh, payload))
-		return &backing_store_helper;
-	return NULL;
+	if (cbfs_helper.init(sbh, payload))
+		sbh = &cbfs_helper;
+	else
+		sbh = NULL;
+	if (backing_store_helper.init(sbh, payload))
+		sbh = &backing_store_helper;
+	else
+		sbh = NULL;
 }
 
 static int build_self_segment_list(
 	struct segment *head,
-	struct payload *payload, uintptr_t *entry)
+	struct payload *payload, uintptr_t *entry, struct sb_helper *sbh)
 {
 	struct segment *new;
 	struct cbfs_payload_segment segment;
 	unsigned long current_offset;
-	struct sb_helper *sbh;
 
-	if (payload->media == CBFS_DEFAULT_MEDIA) {
+/*	if (payload->media == CBFS_DEFAULT_MEDIA) {
 		payload->media = &default_media;
 		if (init_default_cbfs_media(payload->media) != 0) {
 			printk(BIOS_ERR, "Failed to initialize media\n");
 			return -1;
 		}
 	}
-
-	sbh = get_sb_method(payload);
+*/
 	printk(BIOS_DEBUG, "Got sb_method\n");
 	if (sbh != NULL) {
 
@@ -438,25 +438,23 @@ static int build_self_segment_list(
 
 static int load_self_segments(
 	struct segment *head,
-	struct payload *payload)
+	struct payload *payload, struct sb_helper *sbh)
 {
 	struct segment *ptr;
 	//struct cbfs_media defamedia;
 	const unsigned long one_meg = (1UL << 20);
 	unsigned long bounce_high = lb_end;
-	struct sb_helper *sbh;
-	sbh = get_sb_method(payload);
 	if (sbh != NULL) {
 /*	media = payload->media;
 */
-	if (payload->media == CBFS_DEFAULT_MEDIA) {
+/*	if (payload->media == CBFS_DEFAULT_MEDIA) {
 		payload->media = &default_media;
 		if (init_default_cbfs_media(payload->media) != 0) {
 			printk(BIOS_ERR, "Failed to initialize media\n");
 			return -1;
 		}
 	}
-
+*/
 
 	for(ptr = head->next; ptr != head; ptr = ptr->next) {
 		if (bootmem_region_targets_usable_ram(ptr->s_dstaddr,
@@ -597,13 +595,25 @@ void *selfload(struct payload *payload)
 {
 	uintptr_t entry = 0;
 	struct segment head;
+	struct sb_helper sbh;
 
+	if (payload->media == CBFS_DEFAULT_MEDIA) {
+		payload->media = &default_media;
+		if (init_default_cbfs_media(payload->media) != 0) {
+			printk(BIOS_ERR, "Failed to initialize media\n");
+			return NULL;
+		}
+	}
+
+	get_sb_method(&sbh, payload);
+
+	printk(BIOS_DEBUG, "Got sb_method\n");
 	/* Preprocess the self segments */
-	if (!build_self_segment_list(&head, payload, &entry))
+	if (!build_self_segment_list(&head, payload, &entry, &sbh))
 		goto out;
 
 	/* Load the segments */
-	if (!load_self_segments(&head, payload))
+	if (!load_self_segments(&head, payload, &sbh))
 		goto out;
 
 	printk(BIOS_SPEW, "Loaded segments\n");
