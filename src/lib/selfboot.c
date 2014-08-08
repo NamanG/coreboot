@@ -311,17 +311,15 @@ static int relocate_segment(unsigned long buffer, struct segment *seg)
 	return ret;
 }
 
-static void get_sb_method(struct sb_helper *sbh, struct payload *payload)
+static struct sb_helper *get_sb_method(struct payload *payload)
 {
+	struct sb_helper sbh;
 	printk(BIOS_DEBUG, "Inside get_sb_method\n");
-	if (cbfs_helper.init(sbh, payload))
-		sbh = &cbfs_helper;
-	else
-		sbh = NULL;
-	if (backing_store_helper.init(sbh, payload))
-		sbh = &backing_store_helper;
-	else
-		sbh = NULL;
+	if (cbfs_helper.init(&sbh, payload))
+		return &cbfs_helper;
+	if (backing_store_helper.init(&sbh, payload))
+		return &backing_store_helper;
+	return NULL;
 }
 
 static int build_self_segment_list(
@@ -595,7 +593,7 @@ void *selfload(struct payload *payload)
 {
 	uintptr_t entry = 0;
 	struct segment head;
-	struct sb_helper sbh;
+	struct sb_helper *sbh;
 
 	if (payload->media == CBFS_DEFAULT_MEDIA) {
 		payload->media = &default_media;
@@ -605,15 +603,17 @@ void *selfload(struct payload *payload)
 		}
 	}
 
-	get_sb_method(&sbh, payload);
+	sbh = get_sb_method(payload);
+        if (sbh == NULL)
+		return NULL;
 
 	printk(BIOS_DEBUG, "Got sb_method\n");
 	/* Preprocess the self segments */
-	if (!build_self_segment_list(&head, payload, &entry, &sbh))
+	if (!build_self_segment_list(&head, payload, &entry, sbh))
 		goto out;
 
 	/* Load the segments */
-	if (!load_self_segments(&head, payload, &sbh))
+	if (!load_self_segments(&head, payload, sbh))
 		goto out;
 
 	printk(BIOS_SPEW, "Loaded segments\n");
